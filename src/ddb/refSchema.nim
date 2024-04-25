@@ -121,8 +121,8 @@ macro defBuiltinRef*(id: string, body: untyped): untyped =
 
 # these first nodes need to specify IDs manually for bootstrapping
 let
-    idField = "C1uHK0NN"
-    idTitle = "xxCOl19C"
+    idField = "litom-mahut"
+    idTitle = "hakot-teret"
     📝Field* = defBuiltinRef idField:
         idField
         idTitle "Field"
