@@ -6,38 +6,51 @@ import tables
 import fusion/matching
 {.experimental: "caseStmtMacros".}
 
-# The grammar is:
-#  REF ::= id SEXP*
-#
-#  SEXP ::= REFLINK
-#         | REFLINK payload
-#         | REFLINK SEXP*
+## The grammar is:
+##  REF ::= id SEXP*
+##
+##  SEXP ::= REFLINK
+##         | REFLINK payload
+##         | REFLINK SEXP*
 
 type
     ID* = string
     Dexpr* = ref object of RootObj
+        ## D-expressions are trees of structured data that
+        ## conform to a universal schema.
         reflink*: ID
         payload*: string
         children*: seq[Dexpr]
     Ref* = ref object of RootObj
+        ## Refs are stored inside the database.
+        ## Note the similarity between Ref and Dexpr --
+        ## essentially, a Ref is a top-level Dexpr.
+        ## They don't have a payload because we want to
+        ## discourage "schemaless" content inside the ref--
+        ## for example, if a Ref had text, it should be inside
+        ## a (doc) dexpr or (binary) or something.
         reflink*: ID
         children*: seq[Dexpr]
 
     Universe* = ref object of RootObj
+      ## Universes are key/value stores of Refs.
     MapUniverse* = ref object of Universe
       refs: Table[ID, Ref]
 
 converter toDexpr*(rref: Ref): Dexpr =
+  ## Anywhere a Dexpr is needed, a Ref can be used.
   Dexpr(reflink: rref.reflink, children: rref.children)
 
 proc reflink*(rref: Option[Ref]): Option[ID] =
-    if Some(@rr) ?= rref: return some rr.reflink
+  if Some(@rr) ?= rref: return some rr.reflink
 proc reflink*(odxp: Option[Dexpr]): Option[ID] =
-    if Some(@dxp) ?= odxp: return some dxp.reflink
+  if Some(@dxp) ?= odxp: return some dxp.reflink
+
 method lookup*(universe: Universe, id: ID): Option[Ref] {.base.} = none(Ref)
+  ## Lookup a ref by ID
 method lookup*(universe: MapUniverse, id: ID): Option[Ref] =
   if id in universe.refs: return some(universe.refs[id])
-proc lookup*(universe: Universe, dxp: Dexpr): Option[Ref] =
+proc lookupSchema*(universe: Universe, dxp: Dexpr): Option[Ref] =
   return universe.lookup(dxp.reflink)
 
 method add*(universe: Universe, rref: varargs[Ref]): Ref {.discardable, base.} =
