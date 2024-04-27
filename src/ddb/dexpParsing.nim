@@ -132,7 +132,7 @@ proc parseToUnresolvedTokenStream*(input: string): seq[DexprToken] =
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
 # dexpressions like "(foo (bar) (baz <caret-here>"
-proc structuralize(univ: Universe, input: string): seq[DexprToken] =
+proc structuralize(schema: Schema, input: string): seq[DexprToken] =
   var ps = DexprParseState(strLen: input.len)
   var contexts: seq[ID] = @[""]
   let matches = parser.match(input, ps)
@@ -145,8 +145,8 @@ proc structuralize(univ: Universe, input: string): seq[DexprToken] =
     case tok.kind:
     of dtkPushNewContext:
       # Attempt to resolve symbol
-      if Some(@r) ?= univ.resolve(tok.symbol, contexts[^1]):
-        result.add tok.withSym r.reflink
+      if Some(@r) ?= schema.resolve(tok.symbol, contexts[^1]):
+        result.add tok.withSym r.kind
       else:
         raise newException(ValueError, fmt "{tok.symbol} isn't a field of {contexts[^1]}")
     of dtkPopContextImplicitly:
@@ -158,8 +158,8 @@ proc structuralize(univ: Universe, input: string): seq[DexprToken] =
       else:
         raise newException(ValueError, fmt "Unbalanced parentheses: ')' without a '('")
     of dtkBareExp:
-      if Some(@r) ?= univ.resolve(tok.symbol, contexts[^1]):
-        result.add tok.withSym(r.reflink)
+      if Some(@r) ?= schema.resolve(tok.symbol, contexts[^1]):
+        result.add tok.withSym(r.kind)
       else:
         unresolvedStream.insert DexprToken(kind:dtkPopContextImplicitly, loc: tok.loc)
     of dtkStrLit, dtkStrLitIncomplete:

@@ -2,83 +2,138 @@ import sequtils
 import macros
 import options
 import tables
-
+import sets
+import strutils
+import strformat
 import fusion/matching
+import hashes
 {.experimental: "caseStmtMacros".}
-
-## The grammar is:
-##  REF ::= id SEXP*
-##
-##  SEXP ::= REFLINK
-##         | REFLINK payload
-##         | REFLINK SEXP*
 
 type
     ID* = string
-    Dexpr* = ref object of RootObj
-        ## D-expressions are trees of structured data that
-        ## conform to a universal schema.
-        reflink*: ID
-        payload*: string
-        children*: seq[Dexpr]
-    Ref* = ref object of RootObj
-        ## Refs are stored inside the database.
-        ## Note the similarity between Ref and Dexpr --
-        ## essentially, a Ref is a top-level Dexpr.
-        ## They don't have a payload because we want to
-        ## discourage "schemaless" content inside the ref--
-        ## for example, if a Ref had text, it should be inside
-        ## a (doc) dexpr or (binary) or something.
-        reflink*: ID
-        children*: seq[Dexpr]
+        ## IDs uniquely identify expressions stored in the database.
+    Expression* = object
+        ## Expressions are the entry point to your database. Each expression
+        ## is analogous to a single record or database "row".
+        ## The "columns" are the Annotations that each expression contains.
+        ##
+        ## Expressions are typically used in one of two ways:
+        ## 1. To store data, or
+        ## 2. To define the schema that other expressions must conform to.
+        ##
+        ## Data expressions store richly structured data within their
+        ## annotations, much like a JSON document or a s-expression.
+        ## Schema expressions give structure to the universe by
+        ## specifying the possible nesting structure that annotations
+        ## can have.
+        ##
+        ## For example, suppose we have a universe with the following
+        ## five expressions that record a user's vacation:
+        ##   "abcd" -> (title "Trip to Barcelona")
+        ##             (Journal (Date "2024-01-01"
+        ##                        (Text "The plane was late ..."))
+        ##                      (Date "2024-01-05"
+        ##                        (Visited "Park Güell")
+        ##                        (Text "I can't believe...")))
+        ##   "efgh" -> (title "Journal") (annotates "")
+        ##   "ijkl" -> (title "Date") (annotates "efgh")
+        ##   "mnop" -> (title "Text") (annotates "ijkl") (annotates "")
+        ##   "qrst" -> (title "Visited") (annotates "ijkl")
+        ##
+        ## All five expressions live in the database and can be
+        ## edited in the same way. The "abcd" node contains the
+        ## bulk of the data content, while the "efgh", "ijkl",
+        ## "mnop", and "qrst" nodes define the schema that "abcd"
+        ## confirms to. Each of these schema expressions
+        ## has an "annotates" annotation pointing to either the ID of
+        ## some parent schema expression, or "" to denote that the
+        ## annotation should appear at the top level of the expression.
+        ##
+        ## There's no separation between data and schema expressions.
+        ## All five of the nodes could be edited with exactly the same tools,
+        ## and the user is welcome to adjust their schema as they see fit.
+        ## In fact, there's nothing special about the "title" and
+        ## "annotates" annotations either -- they live in the database
+        ## too, addressable thanks to some bootstrapping magic and
+        ## hard-coded IDs!
+        ##
+        ##    "litom-mahut" -> (Title "Annotates") (Annotates "")
+        ##    "hakot-teret" -> (Title "Title") (Annotates "")
+        ##
+
+        key*: ID
+        children*: seq[Annotation]
+    Annotation* = object
+        ## Annotations are the children of Expressions.
+        ## All Annotations confirm to a specific schema.
+        kind*: ID
+        val*: string
+        children*: seq[Annotation]
 
     Universe* = ref object of RootObj
-      ## Universes are key/value stores of Refs.
+      ## Universes are key/value stores of Expressions.
     MapUniverse* = ref object of Universe
-      refs: Table[ID, Ref]
+      refs: Table[ID, Expression]
 
-converter toDexpr*(rref: Ref): Dexpr =
-  ## Anywhere a Dexpr is needed, a Ref can be used.
-  Dexpr(reflink: rref.reflink, children: rref.children)
+converter toAnnotation*(expr: Expression): Annotation =
+  ## Anywhere an Annotation is needed, an Expression can be used.
+  Annotation(kind: expr.key, children: expr.children)
 
-proc reflink*(rref: Option[Ref]): Option[ID] =
-  if Some(@rr) ?= rref: return some rr.reflink
-proc reflink*(odxp: Option[Dexpr]): Option[ID] =
-  if Some(@dxp) ?= odxp: return some dxp.reflink
+proc kind*(expr: Expression): ID = expr.key
 
-method lookup*(universe: Universe, id: ID): Option[Ref] {.base.} = none(Ref)
+iterator items*(expr: Expression): Annotation =
+  for annot in expr.children:
+    yield annot
+iterator items*(expr: Annotation): Annotation =
+  for annot in expr.children:
+    yield annot
+
+# Nicer unwrapping of Optional types
+template liftOptional(name, typeA, typeB: untyped): untyped =
+  proc `name`*(item: Option[typeA]): Option[typeB] =
+    if item.isSome: return some item.get().name
+liftOptional(key, Expression, ID)
+liftOptional(kind, Annotation, ID)
+liftOptional(val, Annotation, string)
+
+
+method lookup*(universe: Universe, id: ID): Option[Expression] {.base.} = none(Expression)
   ## Lookup a ref by ID
-method lookup*(universe: MapUniverse, id: ID): Option[Ref] =
+method lookup*(universe: MapUniverse, id: ID): Option[Expression] =
   if id in universe.refs: return some(universe.refs[id])
-proc lookupSchema*(universe: Universe, dxp: Dexpr): Option[Ref] =
-  return universe.lookup(dxp.reflink)
+proc lookupExprFor*(universe: Universe, annot: Annotation): Option[Expression] =
+  ## returns the schema-defining Expression for a given annotation
+  return universe.lookup(annot.kind)
 
-method add*(universe: Universe, rref: varargs[Ref]): Ref {.discardable, base.} =
+
+
+method add*(universe: Universe, exprs: varargs[Expression]): Expression {.discardable, base.} =
+  ## add an expression to the universe
   raise newException(ObjectAssignmentDefect, "Cannot add a ref to an abstract base universe")
-method add*(universe: MapUniverse, rrefs: varargs[Ref]): Ref {.discardable.} =
-  for r in rrefs:
-    universe.refs[r.reflink] = r
-  rrefs[0]
-method contains*(universe: Universe, rref: Ref): bool {.base.} = false
-method contains*(universe: MapUniverse, rref: Ref): bool =
-  rref.reflink in universe.refs
-
-method fieldsFor*(universe: Universe, context: ID): seq[Ref] {.base.} = discard
+method add*(universe: MapUniverse, exprs: varargs[Expression]): Expression {.discardable.} =
+  for exp in exprs:
+    universe.refs[exp.key] = exp
+  exprs[0]
+method contains*(universe: Universe, key: ID): bool {.base.} = false
+method contains*(universe: MapUniverse, key: ID): bool =
+  key in universe.refs
 
 # Built-in universe
 var builtins* = MapUniverse()
+proc newMapUniverse*(): MapUniverse =
+  MapUniverse(refs: builtins.refs)
 
-proc makeRef*(id: ID, children: varargs[Dexpr]): Ref =
-    Ref(reflink:id, children:children.toSeq)
-proc newDexpr*(rref: Ref, payload: string="", children: varargs[Dexpr]= []): Dexpr =
-    Dexpr(reflink: rref.reflink, payload:payload, children:children.toSeq)
-proc newDexpr*(reflink: ID, payload: string="", children: varargs[Dexpr]= []): Dexpr =
-    Dexpr(reflink: reflink, payload:payload, children:children.toSeq)
+proc makeExpression*(id: ID, items: varargs[Annotation]): Expression =
+    Expression(key:id, children:items.toSeq)
+proc newAnnotation*(expr: Expression, val: string="", items: varargs[Annotation]= []): Annotation =
+    Annotation(kind: expr.key, val:val, children:items.toSeq)
+proc newAnnotation*(key: ID, val: string="", items: varargs[Annotation]= []): Annotation =
+    Annotation(kind: key, val:val, children:items.toSeq)
 
 # Macro for parsing refs and their bodies
-proc bodyToDexpr*(body: NimNode): NimNode {.compileTime.} =
+proc bodyToDexpr(body: NimNode): NimNode {.compileTime.} =
     result = newNimNode(nnkCall)
-    result.add bindSym"newDexpr"
+    result.add bindSym"newAnnotation"
     case body:
     of Ident(strVal: @name):
         result.add body
@@ -101,70 +156,94 @@ proc bodyToDexpr*(body: NimNode): NimNode {.compileTime.} =
             result.add child.bodyToDexpr
     else:
         raise newException(Defect, "Invalid syntax for ref definition: " & body.treeRepr)
-
-proc newMapUniverse*(): MapUniverse =
-  MapUniverse(refs: builtins.refs)
-
-
-macro newRef*(id: string): untyped =
-    result = nnkCall.newTree(bindsym"makeRef", id)
-macro newRef*(id: string, body: untyped): untyped =
-    result = nnkCall.newTree(bindsym"makeRef", id)
+# the real nice macros
+macro newExpression*(id: string): untyped =
+    result = nnkCall.newTree(bindsym"makeExpression", id)
+macro newExpression*(id: string, body: untyped): untyped =
+    result = nnkCall.newTree(bindsym"makeExpression", id)
     for child in body:
         result.add bodyToDexpr(child)
-macro defBuiltinRef*(id: string): untyped =
+macro defBuiltinExpression*(id: string): untyped =
   quote do:
-    builtins.add newRef(`id`)
-macro defBuiltinRef*(id: string, body: untyped): untyped =
+    builtins.add newExpression(`id`)
+macro defBuiltinExpression*(id: string, body: untyped): untyped =
   quote do:
-    builtins.add newRef(`id`, `body`)
+    builtins.add newExpression(`id`, `body`)
 
-# these first nodes need to specify IDs manually for bootstrapping
+# Time to bootstrap our builtins.
+# These first nodes specify IDs manually.
 let
-    idField = "litom-mahut"
+    idAnnotates = "litom-mahut"
     idTitle = "hakot-teret"
-    📝Field* = defBuiltinRef idField:
-        idField
-        idTitle "Field"
-    📝Title* = defBuiltinRef idTitle:
-        📝Field
+    annotates* = defBuiltinExpression idAnnotates:
+        idAnnotates ""
+        idTitle "Annotates"
+    title* = defBuiltinExpression idTitle:
+        annotates ""
         idTitle "Title"
 
-# For validation
-proc payload*(a: Option[Dexpr]): Option[string] =
-  if Some(@dx) ?= a: return some dx.payload
-proc payloads*(a: seq[Dexpr]): seq[string] =
-  return a.mapIt(it.payload)
-iterator items*(a: Dexpr): Dexpr =
-  for c in a.children: yield c
-iterator `/`*(a: Dexpr, b: Ref): Dexpr =
+# Basic ops
+# IMPORTANT: We never want to call a / b when b is an Annotation.
+# Said another way, only Expressions define schema,
+# not Annotations.
+# The converter above allows the converse and not this,
+# which is correct behavior.
+iterator `/`*(a: Annotation, b: Expression): Annotation =
   for child in a:
-    if child.reflink == b.reflink:
+    if child.kind == b.key:
       yield child
-iterator `/^`*(a: Dexpr, b: Ref): string =
-  for child in a / b:
-    yield child.payload
-proc `//`*(a: Dexpr, b: Ref): Option[Dexpr] =
-  for child in a / b: return some(child)
-proc `//`*(a: Option[Dexpr], b: Ref): Option[Dexpr] =
-  if Some(@av) ?= a: return av // b
-proc has*(a: Dexpr, b: Ref): bool =
-  return (a // b).isSome
-proc has*(a: Dexpr, b: Ref, pl: string): bool =
-  for field in a / b:
-    if field.payload == pl:
+iterator `/`*(a: Annotation, kind: ID): Annotation =
+  for child in a:
+    if child.kind == kind:
+      yield child
+proc has*(a: Annotation, b: Expression): bool =
+  for annot in a / b: return true
+proc has*(a: Annotation, b: Expression, pl: string): bool =
+  for annot in a / b:
+    if annot.val == pl:
       return true
+proc first*(a: Annotation, b: Expression): Annotation =
+  for annot in a / b: return annot
+
 # Convenience methods
-proc title*(a: Ref): string =
-  return (a // 📝Title).payload.get("")
-proc titles*(a: Ref): seq[string] =
-  return (a / 📝Title).toSeq.payloads
+proc firstTitle*(a: Expression): Option[string] =
+  for annot in a / title:
+    return some annot.val
+proc allTitles*(a: Expression): seq[string] =
+  for annot in a / title:
+    result.add annot.val
 
-method fieldsFor*(muniverse: MapUniverse, context: ID): seq[Ref] =
-  for rref in muniverse.refs.values:
-    for fieldSpecs in rref / 📝Field:
-      if fieldSpecs.payload == context:
-        result.add rref
-proc fieldsFor*(universe: Universe, rref: Ref): seq[Ref] =
-  fieldsFor(universe, rref.reflink)
+# Finally, schema definitions!
 
+type
+  Schema* = Table[string, SchemaRule]
+  SchemaRule* = ref object
+    expr*: Expression
+    children*: HashSet[SchemaRule] ## mapping titles to these objects
+proc hash*(ann: Annotation): Hash =
+  result = result !& ann.kind.hash !& ann.val.hash !& ann.children.hash
+  result = !$result
+proc hash*(sr: SchemaRule): Hash =
+  result = !$ (result !& sr.expr.hash)
+proc `$`*(schema: SchemaRule): string =
+  let title = schema.expr.allTitles.toSeq.join ","
+  result = fmt"({title}"
+  for child in schema.children:
+    result &= fmt" {$child}"
+  result &= ")"
+
+
+method search*(universe: Universe, kind: ID): seq[Expression] {.base.} = discard
+method search*(universe: MapUniverse, kind: ID): seq[Expression] =
+  for expr in universe.refs.values:
+    for annot in expr / kind:
+      result.add expr
+      break
+
+method getSchema*(universe: Universe): Schema {.base.} =
+  for expr in universe.search annotates.key:
+    var schemarule = result.mgetOrPut(expr.key, SchemaRule())
+    schemarule.expr = expr
+    for allowedParent in expr / annotates:
+      discard result.hasKeyOrPut(allowedParent.val, SchemaRule())
+      result[allowedParent.val].children.incl result[expr.key]

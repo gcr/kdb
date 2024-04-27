@@ -1,67 +1,69 @@
 import ddb/refSchema
 import ddb/dexpParsing
+import ddb/resolution
 import unittest
 import sequtils
 import options
 import strutils
-import ddb/resolution
+import tables
 
 suite "Bulit-in refs":
   test "Essential ref operations":
     check:
-      📝Field.has 📝Title
-      📝Field.has 📝Title, "Field"
-      not 📝Field.has(📝Title, "NotField")
-      📝Field.title == "Field"
-      payload(📝Field // 📝Title) == some("Field")
-    let allBuiltinFields = builtins.fieldsFor("").toSeq.mapIt(it.title)
-    check allBuiltinFields == @["Title", "Field"]
+      annotates.has title
+      annotates.has title, "Annotates"
+      not annotates.has(title, "notAnnotates")
+      annotates.allTitles == @["Annotates"]
+      annotates.firstTitle == some "Annotates"
 
-  test "Check titles of child dexpr refs":
-    let childrenRefs: seq[Ref] = 📝Field.toSeq.mapIt(
-      builtins.lookup(it).get())
-    let titles = childrenRefs.mapIt((it // 📝Title).payload)
-    check titles == @[some "Field", some "Title"]
-    let titles2 = childrenRefs.mapIt it.title
-    check titles2 == @["Field", "Title"]
+  test "Check titles of child annotations":
+    let exprs: seq[Expression] = annotates.items.toSeq.mapIt(
+      builtins.lookup(it.kind).get())
+    let titles = exprs.mapIt(it.firstTitle)
+    check titles == @[some "Annotates", some "Title"]
 
   test "Multiple children":
-    let x = newRef "multichild":
-      📝Title "one"
-      📝Title "two"
-    check x.title == "one"
-    check (x / 📝Title).toSeq.payloads == @["one", "two"]
-    check x.has(📝Title)
-    check not x.has(📝Field)
-    check x.has(📝Title, "one")
-    check x.has(📝Title, "two")
-    check x.titles == @["one", "two"]
+    let x = newExpression "multichild":
+      title "one"
+      title "two"
+    check x.firstTitle == some "one"
+    check (x / title).toSeq.mapIt(it.val) == @["one", "two"]
+    check x.has title
+    check not x.has annotates
+    check x.has(title, "one")
+    check x.has(title, "two")
+    check x.allTitles == @["one", "two"]
 
   test "Deeply nested refs":
     let
-      head = newRef "head": 📝Field
-      author = newRef "auth": 📝Field "head"
-      date = newRef "date": 📝Field "head"
-      someDoc = newRef "someDoc":
+      head = newExpression "head": annotates ""
+      author = newExpression "auth": annotates "head"
+      date = newExpression "date": annotates "head"
+      someDoc = newExpression "someDoc":
           head:
             author "Kimmmy"
             date "2024"
-    check ((someDoc // head).get() // author).payload == some "Kimmmy"
-    check payload(someDoc // head // date) == some "2024"
-    check payload(someDoc // date) == none(string)
+    var authors: seq[string]
+    for h in someDoc / head:
+      for aut in h / author:
+        authors.add aut.val
+    check authors == @["Kimmmy"]
+    check ((someDoc / head).toSeq[0] / date).toSeq[0].val == "2024"
+    var shouldntHave: bool
+    for x in someDoc / date:
+      shouldntHave = true
+    check not shouldntHave
 
 
   test "Builtins is populated":
-    check builtins.contains 📝Field
-    check builtins.contains 📝Title
+    check builtins.contains annotates.key
+    check builtins.contains annotates.key
 
   test "Making ephemeral refs doesn't touch builtins":
-    let x = newRef "abc": 📝Title "something"
+    let x = newExpression "abc": title "something"
     check:
-      not builtins.contains x
-      payload(x // 📝Title) == some "something"
-      📝Title // x == none(Dexpr)
-      payload(📝Title // x) == none(string)
+      @["something"] == x.allTitles
+      not title.has(x)
 
 suite "Dexpr parsing":
   proc tokenize(input: string): string =
@@ -149,31 +151,31 @@ suite "Dexpr parsing":
 suite "Ref resolution":
   setup:
     let
-        doc = newRef "dd":
-            📝Title "Doc"
-            📝Field
-        head = newRef "uuidHead":
-            📝Title "Head"
-            📝Field
-        date = newRef "uuidDate":
-            📝Title "Date"
-            📝Field "uuidHead"
-        title = newRef "titleButInsideHead":
-            📝Title "Title"
-            📝Field "uuidHead"
-        dup1 = newRef "someDup1":
-            📝Title "DuplicateName"
-            📝Field "uuidHead"
-        dup2 = newRef "someDup2":
-            📝Title "DuplicateName"
-            📝Title "UnambiguousName"
-            📝Field "uuidHead"
+        doc = newExpression "dd":
+            title "Doc"
+            annotates ""
+        head = newExpression "uuidHead":
+            title "Head"
+            annotates ""
+        date = newExpression "uuidDate":
+            title "Date"
+            annotates "uuidHead"
+        innertitle = newExpression "titleButInsideHead":
+            title "Title"
+            annotates "uuidHead"
+        dup1 = newExpression "someDup1":
+            title "DuplicateName"
+            annotates "uuidHead"
+        dup2 = newExpression "someDup2":
+            title "DuplicateName"
+            title "UnambiguousName"
+            annotates "uuidHead"
     var univ = newMapUniverse()
-    univ.add doc, head, date, title, dup1, dup2
+    univ.add doc, head, date, innertitle, dup1, dup2
 
   test "Unpolluted builtins":
-    check doc in univ
-    check doc notin builtins
+    check doc.key in univ
+    check doc.key notin builtins
 
   test "ID parsing":
     check "foo".toTitleId == TitleId(title: "foo", id: "")
@@ -183,20 +185,21 @@ suite "Ref resolution":
     check "$".toTitleId == TitleId(title: "", id: "")
 
   test "Direct resolution":
+    let schema = univ.getSchema()
     check:
-      univ.resolveDirectly("Doc", context="").isSome
-      univ.resolveDirectly("NoMatch", context="").isNone
-      univ.resolveDirectly("Title", context="uuidHead").reflink == some "titleButInsideHead"
-      univ.resolveDirectly("Title", context="").reflink == some 📝Title.reflink
-      univ.resolveDirectly("Date", context="").reflink == none(ID)
-      univ.resolveDirectly("Date", context="uuidHead").reflink == some "uuidDate"
-      univ.resolveDirectly("DuplicateName", context="uuidHead").isNone
-      univ.resolveDirectly("$someDup2", context="uuidHead").reflink == some "someDup2"
-      univ.resolveDirectly("NONMATCHING$someDup2", context="uuidHead").isNone
-      univ.resolveDirectly("DuplicateName$someDup1", context="uuidHead").reflink == some "someDup1"
-      univ.resolveDirectly("$someDup2", context="").isNone
-      univ.resolveDirectly("UnambiguousName", context="uuidHead").reflink == some "someDup2"
-      univ.resolveDirectly("unambiguous-name", context="uuidHead").reflink == some "someDup2"
-      univ.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").reflink == some "someDup2"
+      schema.resolveDirectly("Doc", context="").isSome
+      schema.resolveDirectly("NoMatch", context="").isNone
+      schema.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
+      schema.resolveDirectly("Title", context="").key == some title.kind
+      schema.resolveDirectly("Date", context="").key == none(ID)
+      schema.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
+      schema.resolveDirectly("DuplicateName", context="uuidHead").isNone
+      schema.resolveDirectly("$someDup2", context="uuidHead").key == some "someDup2"
+      schema.resolveDirectly("NONMATCHING$someDup2", context="uuidHead").isNone
+      schema.resolveDirectly("DuplicateName$someDup1", context="uuidHead").key == some "someDup1"
+      schema.resolveDirectly("$someDup2", context="").isNone
+      schema.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
+      schema.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
+      schema.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
 
 
