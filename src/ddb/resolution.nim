@@ -3,7 +3,9 @@ import options
 import strutils
 import fusion/matching
 import tables
+import hashes
 import sets
+import sequtils
 {.experimental: "caseStmtMacros".}
 
 type TitleId* = object
@@ -41,23 +43,44 @@ proc titleMatchesNormalized*(a: Expression, b: TitleId): bool =
       if atitle == btitle:
         return true
 
+proc onlyMatch(schemaRules: HashSet[SchemaRule], title: string, matchMethod: proc(a: Expression, b: TitleID): bool): Option[Expression] =
+  var count = 0
+  for schemaRule in schemaRules:
+    if matchMethod(schemaRule.expr, title):
+      result = some schemaRule.expr
+      count += 1
+  if count > 1:
+    result = none(Expression)
+
 proc resolveDirectly*(schema: Schema, title: string, context: ID): Option[Expression] =
-  for matchMethod in [
-                      uidMatches,
-                      titleMatchesExactly,
-                      titleMatchesNormalized
-  ]:
-    var count = 0
+  for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
     if context in schema:
-      for schemaRule in schema[context].children:
-        if matchMethod(schemaRule.expr, title):
-            result = some schemaRule.expr
-            count += 1
-    if count != 1:
-      result = none(Expression)
-    if result.isSome:
-      return result
+      if Some(@schemaRule) ?= schema[context].children.onlyMatch(title, mm):
+        return some schemaRule
 
+proc resolveIndirectly*(schema: Schema, title: string, context: ID): Option[seq[Expression]] =
+  var seen: HashSet[SchemaRule]
+  var seenTwice: HashSet[SchemaRule]
+  var paths: Table[Expression, seq[Expression]]
+  var stack: seq[(SchemaRule, seq[Expression])]
+  # quick DFS
+  if context in schema:
+    stack.add (schema[context], @[])
+    while stack.len > 0:
+      let (last, path) = stack.pop()
+      seen.incl last
+      paths[last.expr] = path
+      for child in last.children:
+        if child notin seen:
+          stack.add (child, concat(path, @[child.expr]))
+        else:
+          seenTwice.incl child
+    for mm in [titleMatchesExactly, titleMatchesNormalized]:
+      if Some(@schemaRule) ?= (seen - seenTwice).onlyMatch(title, mm):
+        return some paths[schemaRule]
 
-proc resolve*(schema: Schema, title: string, context: ID): Option[Expression] =
-  resolveDirectly(schema, title, context)
+proc resolve*(schema: Schema, title: string, context: ID): Option[seq[Expression]] =
+  if Some(@expr) ?= resolveDirectly(schema, title, context):
+    return some @[expr]
+  if Some(@path) ?= resolveIndirectly(schema, title, context):
+    return some path

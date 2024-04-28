@@ -6,6 +6,7 @@ import sequtils
 import options
 import strutils
 import tables
+import fusion/matching
 
 suite "Bulit-in refs":
   test "Essential ref operations":
@@ -151,12 +152,15 @@ suite "Dexpr parsing":
 suite "Ref resolution":
   setup:
     let
+        travel = newExpression "travel":
+            title "Travel"
+            annotates ""
         doc = newExpression "dd":
             title "Doc"
             annotates ""
         head = newExpression "uuidHead":
             title "Head"
-            annotates ""
+            annotates "dd"
         date = newExpression "uuidDate":
             title "Date"
             annotates "uuidHead"
@@ -170,8 +174,14 @@ suite "Ref resolution":
             title "DuplicateName"
             title "UnambiguousName"
             annotates "uuidHead"
+        dup3 = newExpression "someDup3":
+            title "NameMatchMethodTest"
+            annotates "uuidHead"
+        dup4 = newExpression "someDup4":
+            title "name_match_method_test"
+            annotates "uuidHead"
     var univ = newMapUniverse()
-    univ.add doc, head, date, innertitle, dup1, dup2
+    univ.add doc, head, date, innertitle, dup1, dup2, dup3, dup4, travel
 
   test "Unpolluted builtins":
     check doc.key in univ
@@ -201,5 +211,38 @@ suite "Ref resolution":
       schema.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
       schema.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
       schema.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
+
+  test "Resolution order should matter":
+    let schema = univ.getSchema()
+    check:
+      schema.resolveDirectly("name-matchMethod_test", context="uuidHead").isNone
+      schema.resolveDirectly("name_match_method_test", context="uuidHead").key == some "someDup4"
+      schema.resolveDirectly("NameMatchMethodTest", context="uuidHead").key == some "someDup3"
+      schema.resolveDirectly("nameMatchMethodTest", context="uuidHead").isNone
+  test "Indirect resolution":
+    let travelHead = newExpression "recDup":
+      title "RecursiveDuplicate"
+      annotates "travel"
+      annotates "dd"
+      annotates "uuidHead"
+    univ.add travelHead
+    let schema = univ.getSchema()
+    proc resolveIndirectly(title: string, context: ID): Option[seq[string]] =
+      if Some(@path) ?= schema.resolveIndirectly(title, context):
+        return some path.mapIt(it.key)
+    check:
+      resolveIndirectly("name-matchMethod_test", context="").isNone
+      resolveIndirectly("name-matchMethod_test", context="dd").isNone
+      resolveIndirectly("unambiguousName", context="") == some @["dd", "uuidHead", "someDup2"]
+      resolveIndirectly("unambiguous-name", context="") == some @["dd", "uuidHead", "someDup2"]
+      resolveIndirectly("unambiguousName", context="dd") == some @["uuidHead", "someDup2"]
+      resolveIndirectly("unambiguousName", context="travel").isNone
+
+      # only one node appearing in many contexts
+      resolveIndirectly("RecursiveDuplicate", context="").isNone
+      resolveIndirectly("RecursiveDuplicate", context="dd").isNone
+      resolveIndirectly("RecursiveDuplicate", context="travel").isSome
+      resolveIndirectly("RecursiveDuplicate", context="travel") == some @["recDup"]
+      resolveIndirectly("RecursiveDuplicate", context="uuidHead") == some @["recDup"]
 
 

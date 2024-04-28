@@ -145,7 +145,7 @@ proc structuralize(schema: Schema, input: string): seq[DexprToken] =
     case tok.kind:
     of dtkPushNewContext:
       # Attempt to resolve symbol
-      if Some(@r) ?= schema.resolve(tok.symbol, contexts[^1]):
+      if Some(@r) ?= schema.resolveDirectly(tok.symbol, contexts[^1]):
         result.add tok.withSym r.kind
       else:
         raise newException(ValueError, fmt "{tok.symbol} isn't a field of {contexts[^1]}")
@@ -158,9 +158,10 @@ proc structuralize(schema: Schema, input: string): seq[DexprToken] =
       else:
         raise newException(ValueError, fmt "Unbalanced parentheses: ')' without a '('")
     of dtkBareExp:
-      if Some(@r) ?= schema.resolve(tok.symbol, contexts[^1]):
+      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1]):
         result.add tok.withSym(r.kind)
       else:
+        # Backtrack
         unresolvedStream.insert DexprToken(kind:dtkPopContextImplicitly, loc: tok.loc)
     of dtkStrLit, dtkStrLitIncomplete:
       if result[^1].kind == dtkPushNewContext:
