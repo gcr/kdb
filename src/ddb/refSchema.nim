@@ -79,8 +79,6 @@ converter toAnnotation*(expr: Expression): Annotation =
   ## Anywhere an Annotation is needed, an Expression can be used.
   Annotation(kind: expr.key, children: expr.children)
 
-proc kind*(expr: Expression): ID = expr.key
-
 iterator items*(expr: Expression): Annotation =
   for annot in expr.children:
     yield annot

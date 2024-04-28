@@ -7,6 +7,7 @@ import fusion/matching
 import resolution
 import unicode
 import strutils
+import seqUtils
 {.experimental: "caseStmtMacros".}
 
 ## Parsing happens in two stages:
@@ -39,6 +40,7 @@ import strutils
 type
   DexprTokenKind* = enum
     dtkPushNewContext,
+    dtkPushNewContextImplicitly,
     dtkPopContext,
     dtkPopContextImplicitly,
     dtkBareExp,
@@ -55,6 +57,7 @@ type
     s*: seq[DexprToken]
 proc `$`*(dt: Dexprtoken): string =
   return case dt.kind:
+  of dtkPushNewContextImplicitly: fmt"pushi({dt.symbol})"
   of dtkPushNewContext: fmt"push({dt.symbol})"
   of dtkPopContext: fmt"pop"
   of dtkPopContextImplicitly: fmt"popi"
@@ -65,8 +68,26 @@ proc `$`*(dt: Dexprtoken): string =
 proc withSym(tok: DexprToken, id: ID): DexprToken =
   DexprToken(kind:tok.kind, loc:tok.loc, symbol: id, value: tok.value)
 
+
+type
+  ParseResultStatus* = enum
+    parseOk, ## Parse is valid, but incomplete so far.
+    parseFail
+  ParseResult* = object
+    tokens*: seq[DexprToken]
+    result*: Annotation
+    case kind*: ParseResultStatus:
+    of parseOk:
+      original*: seq[DexprToken]
+      contexts*: seq[tuple[key: ID, isExplicit: bool]]
+    of parseFail:
+      message*: string
+      loc*: int
+      unProcessed*: seq[DexprToken]
+
+
 let parser = peg("toplevel", ps: DexprParseState):
-  S <- *(Blank | ',')
+  S <- *(Blank | ',' | '\n')
   sexp_open <- S * '(' * S * >reflink * S:
     ps.s.add DexprToken(
       kind: dtkPushNewContext, symbol: $1, loc: @1 )
@@ -132,43 +153,99 @@ proc parseToUnresolvedTokenStream*(input: string): seq[DexprToken] =
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
 # dexpressions like "(foo (bar) (baz <caret-here>"
-proc structuralize(schema: Schema, input: string): seq[DexprToken] =
+proc structuralize*(schema: Schema, input: string): ParseResult =
   var ps = DexprParseState(strLen: input.len)
-  var contexts: seq[ID] = @[""]
+  var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[("", true)]
   let matches = parser.match(input, ps)
+  var resolved: seq[DexprToken]
   var unresolvedStream = ps.s
   if not matches.ok:
-    raise newException(ValueError, "couldn't even parse this expression, let alone attempt to structuralize it. try again yo")
+    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this expression")
   while unresolvedStream.len > 0:
     var tok = unresolvedStream[0]
+
+    when false:
+      echo "__TRACE: ", $resolved
+      echo "__     : ", $contexts
+      echo "__     : ", $tok
+      echo "__     : ", $unresolvedStream
+
     unresolvedStream.delete(0)
     case tok.kind:
-    of dtkPushNewContext:
+
+    of dtkPushNewContext, dtkPushNewContextImplicitly:
+      # Descend deeper into the structure!
       # Attempt to resolve symbol
-      if Some(@r) ?= schema.resolveDirectly(tok.symbol, contexts[^1]):
-        result.add tok.withSym r.kind
+      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1].key):
+        for newCtx in path[0..^2]:
+          contexts.add (key: newCtx.key, isExplicit: false)
+          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:newCtx.key)
+        resolved.add tok.withSym path[^1].key
+        contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
-        raise newException(ValueError, fmt "{tok.symbol} isn't a field of {contexts[^1]}")
-    of dtkPopContextImplicitly:
-      raise newException(Defect, "how'd a dtkPopContextImplicitly get in here? the parser should never emit these. Could be trying to structuralize an already-structuralized expression. Haven't thought about it idk, look into this.")
+        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "{tok.symbol} isn't a field of {contexts[^1].key}")
     of dtkPopContext:
-      if contexts.len > 0:
-         discard contexts.pop()
-         result.add tok
-      else:
-        raise newException(ValueError, fmt "Unbalanced parentheses: ')' without a '('")
+      # Explicitly ascend from the structure. Only emitted
+      # with an explicit ')', so this should jump out of all
+      # of our implicit contexts too.
+      let (_, wasExplicit) = contexts.pop()
+      resolved.add tok
+      if not wasExplicit:
+        # Backtracking until the last explicit context
+        unresolvedStream.insert tok
+      if contexts.len == 0:
+        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Unbalanced parentheses: ')' without a '('")
+
+    of dtkPopContextImplicitly:
+      resolved.add tok
+      if len(contexts) == 1:
+        if len(unresolvedStream) > 0:
+          # might have a better error message for ye
+          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol}")
+        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Tried to break out of the only context.")
+      let (ctxId, wasExplicit) = contexts.pop()
+      if wasExplicit:
+        if len(unresolvedStream) > 0:
+          # might have a better error message for ye
+          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol} inside {ctxId}")
+        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Tried to implicitly pop out of an explicit context.")
+
     of dtkBareExp:
-      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1]):
-        result.add tok.withSym(r.kind)
+      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1].key):
+        for newCtx in path[0..^2]:
+          contexts.add (key: newCtx.key, isExplicit: false)
+          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:newCtx.key)
+        contexts.add (key: path[^1].key, isExplicit: false)
+        resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:path[^1].key)
       else:
         # Backtrack
+        unresolvedStream.insert tok
         unresolvedStream.insert DexprToken(kind:dtkPopContextImplicitly, loc: tok.loc)
+
     of dtkStrLit, dtkStrLitIncomplete:
-      if result[^1].kind == dtkPushNewContext:
-          result.add tok
+      if resolved[^1].kind == dtkPushNewContext or resolved[^1].kind == dtkPushNewContextImplicitly:
+          resolved.add tok
       else:
-        result.add(DexprToken(kind: dtkPopContextImplicitly))
-        result.add(DexprToken(kind: dtkPushNewContext, symbol: contexts[^1]))
-        result.add tok
+        resolved.add(DexprToken(kind: dtkPopContextImplicitly))
+        resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: contexts[^1].key))
+        resolved.add tok
+
   while contexts.len > 1:
-    result.add DexprToken(kind: dtkPopContextImplicitly)
+    resolved.add DexprToken(kind: dtkPopContextImplicitly)
+    discard contexts.pop
+  return ParseResult(kind: parseOk, tokens: resolved, original: ps.s, contexts: contexts)
+
+proc parse*(schema: Schema, input: string): ParseResult =
+  result = schema.structuralize input
+  var stack: seq[Annotation]
+  if result.kind == parseOk:
+    for tok in result.tokens:
+      case tok:
+      of PushNewContext(), PushNewContextImplicitly():
+        stack.add Annotation(kind: tok.symbol)
+      of BareExp():
+        result = ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
+      of PopContext(), PopContextImplicitly():
+        stack[^2].children.add stack.pop
+      of StrLit(), StrLitIncomplete():
+        stack[^1].val = tok.symbol

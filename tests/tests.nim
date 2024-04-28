@@ -7,6 +7,7 @@ import options
 import strutils
 import tables
 import fusion/matching
+import strformat
 
 suite "Bulit-in refs":
   test "Essential ref operations":
@@ -93,8 +94,8 @@ suite "Dexpr parsing":
         "push(foo) bare(bar)"
       tokenize("(foo \"uh oh")==
         "push(foo) stri(uh oh)"
-      tokenize("(foo \"strlit\" bar \"aaa\"")==
-        "push(foo) str(strlit) bare(bar) str(aaa)"
+      tokenize("(foo \"strlit\" bar \"aaa\" \"bbb\"")==
+        "push(foo) str(strlit) bare(bar) str(aaa) str(bbb)"
       tokenize("(foo \"strlit\" \"aaa\"")==
         "push(foo) str(strlit) str(aaa)"
       tokenize("(foo,,,bar")=="push(foo) bare(bar)"
@@ -200,7 +201,7 @@ suite "Ref resolution":
       schema.resolveDirectly("Doc", context="").isSome
       schema.resolveDirectly("NoMatch", context="").isNone
       schema.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
-      schema.resolveDirectly("Title", context="").key == some title.kind
+      schema.resolveDirectly("Title", context="").key == some title.key
       schema.resolveDirectly("Date", context="").key == none(ID)
       schema.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
       schema.resolveDirectly("DuplicateName", context="uuidHead").isNone
@@ -245,4 +246,59 @@ suite "Ref resolution":
       resolveIndirectly("RecursiveDuplicate", context="travel") == some @["recDup"]
       resolveIndirectly("RecursiveDuplicate", context="uuidHead") == some @["recDup"]
 
+suite "Structuralization":
+  setup:
+    var univ = newMapUniverse()
+    univ.add: newExpression "doc": title "doc"; annotates ""
+    univ.add: newExpression "head": title "head"; annotates "doc"
+    univ.add: newExpression "author": title "author"; annotates "head"
+    univ.add: newExpression "date": title "date"; annotates "head"
+    univ.add: newExpression "body": title "body"; annotates "doc"
+    univ.add: newExpression "h1": title "h1"; annotates "body"
+    univ.add: newExpression "span": title "span"; annotates "h1"; annotates "body"
+    proc structure(str: string): string =
+      case univ.getSchema().structuralize(str):
+      of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
+      of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
 
+
+  test "Fully-specified structures":
+    check:
+      structure("(doc (head (author \"Kimmy\")))")==
+        "push(doc) push(head) push(author) str(Kimmy) pop pop pop"
+      structure("""
+         (doc (head (author "Kimmy")
+                    (date "2024"))
+              (body (h1 (span "Hello"))))
+         """)==
+         "push(doc) push(head) push(author) str(Kimmy) pop " &
+         "push(date) str(2024) pop pop "&
+         "push(body) push(h1) push(span) str(Hello) pop pop pop pop"
+
+  test "Fully-specified structures with bare annotations":
+    check:
+      structure("(doc (head \"Hello\" \"World\"))")==
+        "push(doc) push(head) str(Hello) popi "&
+        "pushi(head) str(World) pop pop"
+
+  test "Implicit context pushes":
+    check:
+      structure("doc author \"Kimmy\" h1 \"Foo\"")==
+        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
+        "pushi(body) pushi(h1) str(Foo) popi popi popi"
+      structure("doc author \"Kimmy\" body span \"Foo\"")==
+        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
+        "pushi(body) pushi(span) str(Foo) popi popi popi"
+      structure("doc author \"Kimmy\" body h1 span \"Foo\"")==
+        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
+        "pushi(body) pushi(h1) pushi(span) str(Foo) popi popi popi popi"
+      structure("doc author \"Kimmy\" body span h1 \"Foo\"")==
+        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
+        "pushi(body) pushi(span) popi pushi(h1) str(Foo) "&
+        "popi popi popi"
+      structure("doc (author \"Kimmy\" h1 \"Foo\")")==
+        "20: Couldn't unambiguously resolve symbol h1 inside author"
+      structure("doc author \"Kimmy\" h1 \"Foo\")")==
+        "27: Unbalanced parentheses: ')' without a '('"
+      structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
+        "28: h1 isn't a field of author"
