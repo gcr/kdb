@@ -2,6 +2,7 @@ import ddb/refSchema
 import ddb/dexpParsing
 import ddb/resolution
 import ddb/annotRepr
+import ddb/universeBackends/sqliteUniverse
 import unittest
 import sequtils
 import options

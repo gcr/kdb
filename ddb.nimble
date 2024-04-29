@@ -14,3 +14,5 @@ installExt    = @["nim"]
 requires "nim >= 1.6.8"
 requires "fusion >= 1.2.0"
 requires "npeg >= 1.2.1"
+requires "cligen >= 1.6.18"
+requires "db_connector >= 0.1.0"

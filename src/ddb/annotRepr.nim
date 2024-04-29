@@ -8,6 +8,9 @@ import json
 
 proc reprFull*(ann: Annotation): string =
     result = fmt "(:{ann.kind}"
+    if ann.val != "":
+        result &= " "
+        result &= $ %*ann.val
     if ann.children.len > 0:
         result &= ann.children.mapIt(reprFull it).join(" ")
     result &= ")"

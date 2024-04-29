@@ -251,3 +251,26 @@ proc parse*(schema: Schema, input: string): ParseResult =
       of StrLit(), StrLitIncomplete():
         stack[^1].val = tok.value
     result.results = stack[0].children
+
+proc parseRaw*(input: string): ParseResult =
+  var ps = DexprParseState(strLen: input.len)
+  let matches = parser.match(input, ps)
+  if matches.ok:
+    result = ParseResult(kind: parseOk, tokens: ps.s, original: ps.s)
+  else:
+    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this expression")
+  var stack: seq[Annotation] = @[Annotation()]
+  for tok in ps.s:
+    case tok:
+    of PushNewContext(), PushNewContextImplicitly():
+      let symbol: TitleId = tok.symbol
+      if symbol.id == "":
+        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt"This symbol needs an ID: {tok.symbol}")
+      stack.add Annotation(kind: symbol.id)
+    of BareExp():
+      return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
+    of PopContext(), PopContextImplicitly():
+      stack[^2].children.add stack.pop
+    of StrLit(), StrLitIncomplete():
+      stack[^1].val = tok.value
+  result.results = stack[0].children
