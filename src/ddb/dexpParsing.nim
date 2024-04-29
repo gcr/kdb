@@ -33,9 +33,9 @@ import seqUtils
 ##         (h1 (span "test")))
 ## which would then become fully-qualified
 ## with appropriate UUIDs for everything:
-## -> ($123 ($456 ($789 "2024"))
-##          ($abc ($def "hello")
-##          ($ghi ($def "test"))))
+## -> (:123 (:456 (:789 "2024"))
+##          (:abc (:def "hello")
+##          (:ghi (:def "test"))))
 
 type
   DexprTokenKind* = enum
@@ -75,7 +75,7 @@ type
     parseFail
   ParseResult* = object
     tokens*: seq[DexprToken]
-    result*: Annotation
+    results*: seq[Annotation]
     case kind*: ParseResultStatus:
     of parseOk:
       original*: seq[DexprToken]
@@ -134,7 +134,7 @@ let parser = peg("toplevel", ps: DexprParseState):
   rawEscape <- >rawEscapeStart:
     ps.s[^1].value.add ($1).substr ps.s[^1].rawStrLitSkipLen
 
-  reflink <- +{'0'..'9', 'a'..'z', 'A'..'Z', '-', '_', '$'}
+  reflink <- +{'0'..'9', 'a'..'z', 'A'..'Z', '-', '_', ':'}
   toplevel <- +(sexp_open * *strlit |
                 mexp_open * *strlit |
                 bare_dexpr * *strlit |
@@ -167,7 +167,7 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
     when false:
       echo "__TRACE: ", $resolved
       echo "__     : ", $contexts
-      echo "__     : ", $tok
+      echo "__     : ", $tok, " @ ", $tok.loc
       echo "__     : ", $unresolvedStream
 
     unresolvedStream.delete(0)
@@ -226,8 +226,8 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
       if resolved[^1].kind == dtkPushNewContext or resolved[^1].kind == dtkPushNewContextImplicitly:
           resolved.add tok
       else:
-        resolved.add(DexprToken(kind: dtkPopContextImplicitly))
-        resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: contexts[^1].key))
+        resolved.add(DexprToken(kind: dtkPopContextImplicitly, loc:tok.loc))
+        resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: contexts[^1].key, loc:tok.loc))
         resolved.add tok
 
   while contexts.len > 1:
@@ -237,15 +237,17 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
 
 proc parse*(schema: Schema, input: string): ParseResult =
   result = schema.structuralize input
-  var stack: seq[Annotation]
+  var stack: seq[Annotation] = @[Annotation()]
   if result.kind == parseOk:
+    #echo "__ Parsing: ", $result.tokens
     for tok in result.tokens:
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
         stack.add Annotation(kind: tok.symbol)
       of BareExp():
-        result = ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
+        return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
       of PopContext(), PopContextImplicitly():
         stack[^2].children.add stack.pop
       of StrLit(), StrLitIncomplete():
-        stack[^1].val = tok.symbol
+        stack[^1].val = tok.value
+    result.results = stack[0].children

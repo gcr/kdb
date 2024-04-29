@@ -13,7 +13,7 @@ type TitleId* = object
     id*: string
 
 converter toTitleId*(x: string): TitleId =
-    let idx = x.find '$'
+    let idx = x.find ':'
     if idx == -1: result.title = x
     else:
         result.title = x[0..<idx]
@@ -75,7 +75,7 @@ proc resolveIndirectly*(schema: Schema, title: string, context: ID): Option[seq[
           stack.add (child, concat(path, @[child.expr]))
         else:
           seenTwice.incl child
-    for mm in [titleMatchesExactly, titleMatchesNormalized]:
+    for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
       if Some(@schemaRule) ?= (seen - seenTwice).onlyMatch(title, mm):
         return some paths[schemaRule]
 

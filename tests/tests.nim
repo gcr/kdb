@@ -1,6 +1,7 @@
 import ddb/refSchema
 import ddb/dexpParsing
 import ddb/resolution
+import ddb/annotRepr
 import unittest
 import sequtils
 import options
@@ -78,8 +79,8 @@ suite "Dexpr parsing":
          "bare(abc) bare(def) bare(ghi)"
       tokenize("abc, def, ghi")==
          "bare(abc) bare(def) bare(ghi)"
-      tokenize("(foo, b$ar, (ba-z q_ux))")==
-          "push(foo) bare(b$ar) push(ba-z) bare(q_ux) pop pop"
+      tokenize("(foo, b:ar, (ba-z q_ux))")==
+          "push(foo) bare(b:ar) push(ba-z) bare(q_ux) pop pop"
       tokenize("(one two(three, four(), five(six)))")==
           "push(one) push(two) bare(three) push(four) "&
           "pop push(five) bare(six) pop pop pop"
@@ -190,10 +191,10 @@ suite "Ref resolution":
 
   test "ID parsing":
     check "foo".toTitleId == TitleId(title: "foo", id: "")
-    check "foo$".toTitleId == TitleId(title: "foo", id: "")
-    check "$abcd".toTitleId == TitleId(title: "", id: "abcd")
-    check "a$b".toTitleId == TitleId(title: "a", id: "b")
-    check "$".toTitleId == TitleId(title: "", id: "")
+    check "foo:".toTitleId == TitleId(title: "foo", id: "")
+    check ":abcd".toTitleId == TitleId(title: "", id: "abcd")
+    check "a:b".toTitleId == TitleId(title: "a", id: "b")
+    check ":".toTitleId == TitleId(title: "", id: "")
 
   test "Direct resolution":
     let schema = univ.getSchema()
@@ -205,10 +206,10 @@ suite "Ref resolution":
       schema.resolveDirectly("Date", context="").key == none(ID)
       schema.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
       schema.resolveDirectly("DuplicateName", context="uuidHead").isNone
-      schema.resolveDirectly("$someDup2", context="uuidHead").key == some "someDup2"
-      schema.resolveDirectly("NONMATCHING$someDup2", context="uuidHead").isNone
-      schema.resolveDirectly("DuplicateName$someDup1", context="uuidHead").key == some "someDup1"
-      schema.resolveDirectly("$someDup2", context="").isNone
+      schema.resolveDirectly(":someDup2", context="uuidHead").key == some "someDup2"
+      schema.resolveDirectly("NONMATCHING:someDup2", context="uuidHead").isNone
+      schema.resolveDirectly("DuplicateName:someDup1", context="uuidHead").key == some "someDup1"
+      schema.resolveDirectly("$:omeDup2", context="").isNone
       schema.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
       schema.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
       schema.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
@@ -256,9 +257,17 @@ suite "Structuralization":
     univ.add: newExpression "body": title "body"; annotates "doc"
     univ.add: newExpression "h1": title "h1"; annotates "body"
     univ.add: newExpression "span": title "span"; annotates "h1"; annotates "body"
+    univ.add: newExpression "dup1": title "dup"; annotates "body"; annotates "body"
+    univ.add: newExpression "dup2": title "dup"; title "dup2"; annotates "body"; annotates "body"
     proc structure(str: string): string =
       case univ.getSchema().structuralize(str):
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
+      of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
+    proc parseAnnot(str: string): string =
+      let schema = univ.getSchema()
+      case schema.parse(str):
+      of Ok(results: @results):
+        return results.mapIt(reprHumanFriendly(univ, schema, it)).join(", ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
 
 
@@ -302,3 +311,17 @@ suite "Structuralization":
         "27: Unbalanced parentheses: ')' without a '('"
       structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
         "28: h1 isn't a field of author"
+
+  test "Friendly representations":
+    check:
+      parseAnnot("(doc (head (author \"Kimmy\")))")==
+       "(doc (head (author \"Kimmy\")))"
+      parseAnnot("body span \"Foo\" \"Bar\"")==
+       "(doc (body (span \"Foo\") (span \"Bar\")))"
+      parseAnnot(":dup1 \"test\"")==
+       "(doc (body (dup:dup1 \"test\")))"
+
+  test "Multiple annotations":
+    check:
+      parseAnnot("(doc \"Hello\") (doc \"World\")")==
+       "(doc \"Hello\"), (doc \"World\")"
