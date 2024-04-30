@@ -23,9 +23,18 @@ proc openSqliteUniverse*(path: string): SqliteUniverse =
     result.db.exec sql"""
     create table if not exists expressions(
         id TEXT primary key not null unique,
-        val BLOB
+        val BLOB,
+        lastModified REAL
     );
     """
+    result.db.exec sql"""
+    create table if not exists versions(
+        id TEXT primary key not null,
+        val BLOB,
+        timestamp REAL
+    );
+    """
+    result.db.exec sql"create index if not exists versions_time on versions(timestamp)"
     result.db.exec sql"""
     create table if not exists annot_cache(
         parent_id TEXT,
@@ -33,6 +42,7 @@ proc openSqliteUniverse*(path: string): SqliteUniverse =
         unique(parent_id, child_id)
     );
     """
+    result.db.exec sql"create index if not exists annot_cache_child on annot_cache(child_id)"
 
 
 method lookup*(universe: SqliteUniverse, id: ID): Option[Expression] =
@@ -49,19 +59,21 @@ method lookup*(universe: SqliteUniverse, id: ID): Option[Expression] =
 method add*(universe: SqliteUniverse, exprs: varargs[Expression]): Expression {.discardable.} =
     for expr in exprs:
         universe.db.exec(sql"""
-            delete from annot_cache where parent_id = ?;
-        """, expr.key)
-        universe.db.exec(sql"""
-        insert into expressions(id, val) values(?, ?)
-        on conflict(id) do update set val=excluded.val;
+        insert into expressions(id, val, lastModified) values(?, ?, unixepoch('subsec'))
+        on conflict(id) do update set val=excluded.val, lastModified=unixepoch('subsec');
         """, expr.key, expr.children.mapIt(it.reprFull).join(" "))
+        universe.db.exec(sql"""
+        insert into versions(id,val,timestamp)
+          select id, val, lastModified from expressions where id=?
+        """, expr.key)
+        universe.db.exec(sql"delete from annot_cache where parent_id = ?;", expr.key)
         for annot in expr.children:
             universe.db.exec(sql"""
             insert or ignore into annot_cache(parent_id, child_id) values(?, ?)
             """, expr.key, annot.kind)
 
 method contains*(universe: SqliteUniverse, key: ID): bool =
-    let row = universe.db.getRow(sql"select id, val from expressions where id=?", key)
+    let row = universe.db.getRow(sql"select id, val from doc where id=?", key)
     if row[0] != "":
         return true
 
