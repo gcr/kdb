@@ -47,11 +47,12 @@ method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     let row = library.db.getRow(sql"select id, val from docs where id=?", id)
     if row[0] == "":
         return none(Doc)
-    let parseResult = parseRaw(row[1])
-    if parseResult.kind != parseOk:
-        raise newException(ValueError, parseResult.message)
+    var parser = ParseState(input: row[1])
+    parser.parse
+    if parser.kind != parseOk:
+        raise newException(ValueError, parser.message)
     return some Doc(key: row[0],
-                           children: parseResult.results)
+                           children: parser.results)
 
 
 method add*(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discardable.} =

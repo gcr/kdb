@@ -68,7 +68,9 @@ suite "Bulit-in refs":
 
 suite "Dexpr parsing":
   proc tokenize(input: string): string =
-    let tokens = input.parseToUnresolvedTokenStream.mapIt($it)
+    var parser = ParseState(input: input)
+    parser.processTokenStream()
+    let tokens = parser.tokens.mapIt($it)
     return tokens.join(" ")
 
   test "Parse streams":
@@ -104,12 +106,13 @@ suite "Dexpr parsing":
       tokenize("(foo \"bad")=="push(foo) stri(bad)"
 
   proc parseString(str:string):string =
-    let tokens = parseToUnresolvedTokenStream("(open " & str)
-    if ($tokens[1]).startsWith("str"):
-      return ($tokens[1])[4..^2]
+    var parser = ParseState(input: "(open "&str)
+    parser.processTokenStream()
+    if ($parser.tokens[1]).startsWith("str"):
+      return ($parser.tokens[1])[4..^2]
     else:
       # something WAY wrong happened
-      return $tokens[1]
+      return $parser.tokens[1]
   test "String escapes":
     check:
       # note use of raw strings and escaping gymnastics
@@ -258,12 +261,17 @@ suite "Structuralization":
     univ.add: newDoc "dup1": title "dup"; vocab "body"; vocab "body"
     univ.add: newDoc "dup2": title "dup"; title "dup2"; vocab "body"; vocab "body"
     proc structure(str: string): string =
-      case univ.getSchema().structuralize(str):
+      var parser = ParseState(input: str, vocab: univ.getSchema())
+      parser.processTokenStream()
+      parser.structuralize("")
+      case parser:
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
     proc parseAnnot(str: string): string =
       let schema = univ.getSchema()
-      case schema.parse(str):
+      var parser = ParseState(input: str, vocab: schema)
+      parser.parse("")
+      case parser:
       of Ok(results: @results):
         return results.mapIt(reprHumanFriendly(univ, schema, it)).join(", ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"

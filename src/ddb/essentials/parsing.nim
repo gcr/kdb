@@ -53,10 +53,10 @@ type
     symbol*: string
     value*: string
     rawStrLitSkipLen*: int
-  DexprParseState* = object
+  TokenParseState* = object
     strLen*: int
     s*: seq[DexprToken]
-proc `$`*(dt: Dexprtoken): string =
+proc `$`*(dt: DexprToken): string =
   return case dt.kind:
   of dtkPushNewContextImplicitly: fmt"pushi({dt.symbol})"
   of dtkPushNewContext: fmt"push({dt.symbol})"
@@ -74,20 +74,27 @@ type
   ParseResultStatus* = enum
     parseOk, ## Parse is valid, but incomplete so far.
     parseFail
-  ParseResult* = object
+  ParseState* = object
+    input*: string
+    vocab*: Vocabulary
     tokens*: seq[DexprToken]
     results*: seq[Expr]
-    case kind*: ParseResultStatus:
-    of parseOk:
-      original*: seq[DexprToken]
-      contexts*: seq[tuple[key: ID, isExplicit: bool]]
-    of parseFail:
-      message*: string
-      loc*: int
-      unProcessed*: seq[DexprToken]
+    kind*: ParseResultStatus
+    preStructuralize*: seq[DexprToken]
+    incompleteContexts*: seq[tuple[key: ID, isExplicit: bool]]
+    # for failures:
+    message*: string
+    loc*: int
+    processed*: seq[DexprToken]
+
+proc setFail(ps: var ParseState, loc: int, message: string, processed: seq[DexprToken]) =
+  ps.kind = parseFail
+  ps.loc = loc
+  ps.message = message
+  ps.processed = processed
 
 
-let parser = peg("toplevel", ps: DexprParseState):
+let tokenPegParser = peg("toplevel", ps: TokenParseState):
   S <- *(Blank | ',' | '\n')
   sexp_open <- S * '(' * S * >reflink * S:
     ps.s.add DexprToken(
@@ -142,10 +149,14 @@ let parser = peg("toplevel", ps: DexprParseState):
                 close)  * !1
 
 # for testing
-proc parseToUnresolvedTokenStream*(input: string): seq[DexprToken] =
-  var ps = DexprParseState(strLen: input.len)
-  let matches = parser.match(input, ps)
-  return ps.s
+proc processTokenStream*(p: var ParseState) =
+  var tps = TokenParseState(strLen: p.input.len)
+  let matches = tokenPegParser.match(p.input, tps)
+  p.tokens = tps.s
+  if not matches.ok:
+    p.kind = parseFail
+    p.loc = matches.matchMax
+    p.message = "Failed to parse"
 
 # A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate schema backtracking.
 # All pushes and pops are guaranteed to
@@ -154,16 +165,18 @@ proc parseToUnresolvedTokenStream*(input: string): seq[DexprToken] =
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
 # dDocs like "(foo (bar) (baz <caret-here>"
-proc structuralize*(vocab: Vocabulary, input: string, context=""): ParseResult =
-  var ps = DexprParseState(strLen: input.len)
+proc structuralize*(ps: var ParseState, context="") =
   var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[(context, true)]
-  let matches = parser.match(input, ps)
   var resolved: seq[DexprToken]
-  var unresolvedStream = ps.s
-  if not matches.ok:
-    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this Doc")
+  var unresolvedstream = ps.tokens
+  if ps.kind != parseOk:
+    return
   while unresolvedStream.len > 0:
     var tok = unresolvedStream[0]
+
+    template fail(message: string): untyped =
+      ps.setFail(tok.loc, fmt(message), processed=resolved)
+      return
 
     when false:
       echo "__TRACE: ", $resolved
@@ -177,14 +190,14 @@ proc structuralize*(vocab: Vocabulary, input: string, context=""): ParseResult =
     of dtkPushNewContext, dtkPushNewContextImplicitly:
       # Descend deeper into the structure!
       # Attempt to resolve symbol
-      if Some(@path) ?= vocab.resolve(tok.symbol, contexts[^1].key):
+      if Some(@path) ?= ps.vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
           resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
         resolved.add tok.withSym ":"&path[^1].key
         contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
-        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "{tok.symbol} isn't a field of {contexts[^1].key}")
+        fail "{tok.symbol} isn't a field of {contexts[^1].key}"
     of dtkPopContext:
       # Explicitly ascend from the structure. Only emitted
       # with an explicit ')', so this should jump out of all
@@ -195,24 +208,24 @@ proc structuralize*(vocab: Vocabulary, input: string, context=""): ParseResult =
         # Backtracking until the last explicit context
         unresolvedStream.insert tok
       if contexts.len == 0:
-        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Unbalanced parentheses: ')' without a '('")
+        fail "Unbalanced parentheses: ')' without a '('"
 
     of dtkPopContextImplicitly:
       resolved.add tok
       if len(contexts) == 1:
         if len(unresolvedStream) > 0:
           # might have a better error message for ye
-          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol}")
-        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Tried to break out of the only context.")
+          fail "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol}"
+        fail "Tried to break out of the only context."
       let (ctxId, wasExplicit) = contexts.pop()
       if wasExplicit:
         if len(unresolvedStream) > 0:
           # might have a better error message for ye
-          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol} inside {ctxId}")
-        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Tried to implicitly pop out of an explicit context.")
+          fail "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol} inside {ctxId}"
+        fail "Tried to implicitly pop out of an explicit context."
 
     of dtkBareExp:
-      if Some(@path) ?= vocab.resolve(tok.symbol, contexts[^1].key):
+      if Some(@path) ?= ps.vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
           resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
@@ -231,41 +244,42 @@ proc structuralize*(vocab: Vocabulary, input: string, context=""): ParseResult =
         resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: ":"&contexts[^1].key, loc:tok.loc))
         resolved.add tok
 
+  ps.incompleteContexts = contexts
   while contexts.len > 1:
     resolved.add DexprToken(kind: dtkPopContextImplicitly)
     discard contexts.pop
-  return ParseResult(kind: parseOk, tokens: resolved, original: ps.s, contexts: contexts)
+  ps.kind = parseOk
+  ps.preStructuralize = ps.tokens
+  ps.tokens = resolved
 
-proc parse*(vocab: Vocabulary, input: string, raw=false): ParseResult =
-  if raw:
-    ## Raw parsing doesn't do any structuralization, so accepts
-    ## any result, even results that don't fit the vocabulary.
-    ## Good for reading directly from the database.
-    var ps = DexprParseState(strLen: input.len)
-    let matches = parser.match(input, ps)
-    if matches.ok:
-      result = ParseResult(kind: parseOk, tokens: ps.s, original: ps.s)
-    else:
-      return ParseResult(kind: parseFail, loc: matches.matchMax, message: fmt"Couldn't parse this input")
-  else:
-    ## Without raw parsing, results are structuralized.
-    result = vocab.structuralize input
+proc processExprs*(ps: var ParseState) =
   var stack: seq[Expr] = @[Expr()]
-  if result.kind == parseOk:
-    for tok in result.tokens:
+  var processed: seq[DexprToken]
+  if ps.kind == parseOk:
+    for tok in ps.tokens:
+      processed.add tok
+      template fail(message: string): untyped =
+        ps.setFail(tok.loc, fmt(message), processed=processed)
+        return
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
         let symbol: TitleId = tok.symbol
         if symbol.id == "":
-          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt"This symbol needs an ID: {tok.symbol}")
+          fail "This symbol must start with a colon: {tok.symbol}"
         stack.add Expr(kind: symbol.id)
       of BareExp():
-        return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare Doc found")
+        fail "Internal error: Bare expr found"
       of PopContext(), PopContextImplicitly():
         stack[^2].children.add stack.pop
       of StrLit(), StrLitIncomplete():
         stack[^1].val = tok.value
-    result.results = stack[0].children
+    ps.results = stack[0].children
 
-proc parseRaw*(input: string): ParseResult =
-  Vocabulary().parse(input, raw=true)
+
+proc parse*(ps: var ParseState, rootContext = "") =
+  ps.processTokenStream
+  if ps.kind == parseOk:
+    if ps.vocab.len > 0:
+      ps.structuralize(rootContext)
+  if ps.kind == parseOk:
+    ps.processExprs
