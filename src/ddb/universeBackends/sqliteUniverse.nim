@@ -17,6 +17,9 @@ type
 proc openSqliteUniverse*(path: string): SqliteUniverse =
     result = SqliteUniverse(path: path)
     result.db = open(path, "","","")
+    result.db.exec sql"pragma busy_timeout=1000"
+    result.db.exec sql"pragma synchronous=NORMAL"
+    result.db.exec sql"pragma journal_mode=TRUNCATE"
     result.db.exec sql"""
     create table if not exists expressions(
         id TEXT primary key not null unique,
