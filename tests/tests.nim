@@ -1,8 +1,5 @@
-import ddb/refSchema
-import ddb/dexpParsing
-import ddb/resolution
-import ddb/annotRepr
-import ddb/universeBackends/sqliteUniverse
+import ddb/essentials/[docs, vocabulary, parsing, resolution, repr]
+import ddb/universeBackends/sqliteLibrary
 import unittest
 import sequtils
 import options
@@ -14,36 +11,36 @@ import strformat
 suite "Bulit-in refs":
   test "Essential ref operations":
     check:
-      annotates.has title
-      annotates.has title, "Annotates"
-      not annotates.has(title, "notAnnotates")
-      annotates.allTitles == @["Annotates"]
-      annotates.firstTitle == some "Annotates"
+      vocab.has title
+      vocab.hasEqual title, "vocab"
+      not vocab.hasEqual(title, "something else")
+      vocab.allTitles == @["vocab"]
+      vocab.firstTitle == some "vocab"
 
-  test "Check titles of child annotations":
-    let exprs: seq[Expression] = annotates.items.toSeq.mapIt(
+  test "Check titles of child Exprs":
+    let docs: seq[Doc] = vocab.items.toSeq.mapIt(
       builtins.lookup(it.kind).get())
-    let titles = exprs.mapIt(it.firstTitle)
-    check titles == @[some "Annotates", some "Title"]
+    let titles = docs.mapIt(it.firstTitle)
+    check titles == @[some "vocab", some "title"]
 
   test "Multiple children":
-    let x = newExpression "multichild":
+    let x = newDoc "multichild":
       title "one"
       title "two"
     check x.firstTitle == some "one"
     check (x / title).toSeq.mapIt(it.val) == @["one", "two"]
     check x.has title
-    check not x.has annotates
-    check x.has(title, "one")
-    check x.has(title, "two")
+    check not x.has vocab
+    check x.hasEqual(title, "one")
+    check x.hasEqual(title, "two")
     check x.allTitles == @["one", "two"]
 
   test "Deeply nested refs":
     let
-      head = newExpression "head": annotates ""
-      author = newExpression "auth": annotates "head"
-      date = newExpression "date": annotates "head"
-      someDoc = newExpression "someDoc":
+      head = newDoc "head": vocab ""
+      author = newDoc "auth": vocab "head"
+      date = newDoc "date": vocab "head"
+      someDoc = newDoc "someDoc":
           head:
             author "Kimmmy"
             date "2024"
@@ -60,11 +57,11 @@ suite "Bulit-in refs":
 
 
   test "Builtins is populated":
-    check builtins.contains annotates.key
-    check builtins.contains annotates.key
+    check builtins.contains vocab.key
+    check builtins.contains title.key
 
   test "Making ephemeral refs doesn't touch builtins":
-    let x = newExpression "abc": title "something"
+    let x = newDoc "abc": title "something"
     check:
       @["something"] == x.allTitles
       not title.has(x)
@@ -155,35 +152,35 @@ suite "Dexpr parsing":
 suite "Ref resolution":
   setup:
     let
-        travel = newExpression "travel":
+        travel = newDoc "travel":
             title "Travel"
-            annotates ""
-        doc = newExpression "dd":
+            vocab ""
+        doc = newDoc "dd":
             title "Doc"
-            annotates ""
-        head = newExpression "uuidHead":
+            vocab ""
+        head = newDoc "uuidHead":
             title "Head"
-            annotates "dd"
-        date = newExpression "uuidDate":
+            vocab "dd"
+        date = newDoc "uuidDate":
             title "Date"
-            annotates "uuidHead"
-        innertitle = newExpression "titleButInsideHead":
+            vocab "uuidHead"
+        innertitle = newDoc "titleButInsideHead":
             title "Title"
-            annotates "uuidHead"
-        dup1 = newExpression "someDup1":
+            vocab "uuidHead"
+        dup1 = newDoc "someDup1":
             title "DuplicateName"
-            annotates "uuidHead"
-        dup2 = newExpression "someDup2":
+            vocab "uuidHead"
+        dup2 = newDoc "someDup2":
             title "DuplicateName"
             title "UnambiguousName"
-            annotates "uuidHead"
-        dup3 = newExpression "someDup3":
+            vocab "uuidHead"
+        dup3 = newDoc "someDup3":
             title "NameMatchMethodTest"
-            annotates "uuidHead"
-        dup4 = newExpression "someDup4":
+            vocab "uuidHead"
+        dup4 = newDoc "someDup4":
             title "name_match_method_test"
-            annotates "uuidHead"
-    var univ = newMapUniverse()
+            vocab "uuidHead"
+    var univ = newMapLibrary()
     univ.add doc, head, date, innertitle, dup1, dup2, dup3, dup4, travel
 
   test "Unpolluted builtins":
@@ -223,11 +220,11 @@ suite "Ref resolution":
       schema.resolveDirectly("NameMatchMethodTest", context="uuidHead").key == some "someDup3"
       schema.resolveDirectly("nameMatchMethodTest", context="uuidHead").isNone
   test "Indirect resolution":
-    let travelHead = newExpression "recDup":
+    let travelHead = newDoc "recDup":
       title "RecursiveDuplicate"
-      annotates "travel"
-      annotates "dd"
-      annotates "uuidHead"
+      vocab "travel"
+      vocab "dd"
+      vocab "uuidHead"
     univ.add travelHead
     let schema = univ.getSchema()
     proc resolveIndirectly(title: string, context: ID): Option[seq[string]] =
@@ -250,16 +247,16 @@ suite "Ref resolution":
 
 suite "Structuralization":
   setup:
-    var univ = newMapUniverse()
-    univ.add: newExpression "doc": title "doc"; annotates ""
-    univ.add: newExpression "head": title "head"; annotates "doc"
-    univ.add: newExpression "author": title "author"; annotates "head"
-    univ.add: newExpression "date": title "date"; annotates "head"
-    univ.add: newExpression "body": title "body"; annotates "doc"
-    univ.add: newExpression "h1": title "h1"; annotates "body"
-    univ.add: newExpression "span": title "span"; annotates "h1"; annotates "body"
-    univ.add: newExpression "dup1": title "dup"; annotates "body"; annotates "body"
-    univ.add: newExpression "dup2": title "dup"; title "dup2"; annotates "body"; annotates "body"
+    var univ = newMapLibrary()
+    univ.add: newDoc "doc": title "doc"; vocab ""
+    univ.add: newDoc "head": title "head"; vocab "doc"
+    univ.add: newDoc "author": title "author"; vocab "head"
+    univ.add: newDoc "date": title "date"; vocab "head"
+    univ.add: newDoc "body": title "body"; vocab "doc"
+    univ.add: newDoc "h1": title "h1"; vocab "body"
+    univ.add: newDoc "span": title "span"; vocab "h1"; vocab "body"
+    univ.add: newDoc "dup1": title "dup"; vocab "body"; vocab "body"
+    univ.add: newDoc "dup2": title "dup"; title "dup2"; vocab "body"; vocab "body"
     proc structure(str: string): string =
       case univ.getSchema().structuralize(str):
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
@@ -275,36 +272,36 @@ suite "Structuralization":
   test "Fully-specified structures":
     check:
       structure("(doc (head (author \"Kimmy\")))")==
-        "push(doc) push(head) push(author) str(Kimmy) pop pop pop"
+        "push(:doc) push(:head) push(:author) str(Kimmy) pop pop pop"
       structure("""
          (doc (head (author "Kimmy")
                     (date "2024"))
               (body (h1 (span "Hello"))))
          """)==
-         "push(doc) push(head) push(author) str(Kimmy) pop " &
-         "push(date) str(2024) pop pop "&
-         "push(body) push(h1) push(span) str(Hello) pop pop pop pop"
+         "push(:doc) push(:head) push(:author) str(Kimmy) pop " &
+         "push(:date) str(2024) pop pop "&
+         "push(:body) push(:h1) push(:span) str(Hello) pop pop pop pop"
 
-  test "Fully-specified structures with bare annotations":
+  test "Fully-specified structures with bare Exprs":
     check:
       structure("(doc (head \"Hello\" \"World\"))")==
-        "push(doc) push(head) str(Hello) popi "&
-        "pushi(head) str(World) pop pop"
+        "push(:doc) push(:head) str(Hello) popi "&
+        "pushi(:head) str(World) pop pop"
 
   test "Implicit context pushes":
     check:
       structure("doc author \"Kimmy\" h1 \"Foo\"")==
-        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
-        "pushi(body) pushi(h1) str(Foo) popi popi popi"
+        "pushi(:doc) pushi(:head) pushi(:author) str(Kimmy) popi popi "&
+        "pushi(:body) pushi(:h1) str(Foo) popi popi popi"
       structure("doc author \"Kimmy\" body span \"Foo\"")==
-        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
-        "pushi(body) pushi(span) str(Foo) popi popi popi"
+        "pushi(:doc) pushi(:head) pushi(:author) str(Kimmy) popi popi "&
+        "pushi(:body) pushi(:span) str(Foo) popi popi popi"
       structure("doc author \"Kimmy\" body h1 span \"Foo\"")==
-        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
-        "pushi(body) pushi(h1) pushi(span) str(Foo) popi popi popi popi"
+        "pushi(:doc) pushi(:head) pushi(:author) str(Kimmy) popi popi "&
+        "pushi(:body) pushi(:h1) pushi(:span) str(Foo) popi popi popi popi"
       structure("doc author \"Kimmy\" body span h1 \"Foo\"")==
-        "pushi(doc) pushi(head) pushi(author) str(Kimmy) popi popi "&
-        "pushi(body) pushi(span) popi pushi(h1) str(Foo) "&
+        "pushi(:doc) pushi(:head) pushi(:author) str(Kimmy) popi popi "&
+        "pushi(:body) pushi(:span) popi pushi(:h1) str(Foo) "&
         "popi popi popi"
       structure("doc (author \"Kimmy\" h1 \"Foo\")")==
         "20: Couldn't unambiguously resolve symbol h1 inside author"
@@ -322,7 +319,7 @@ suite "Structuralization":
       parseAnnot(":dup1 \"test\"")==
        "(doc (body (dup:dup1 \"test\")))"
 
-  test "Multiple annotations":
+  test "Multiple Exprs":
     check:
       parseAnnot("(doc \"Hello\") (doc \"World\")")==
        "(doc \"Hello\"), (doc \"World\")"

@@ -2,7 +2,7 @@
 
 version       = "0.1.0"
 author        = "Kimberly Wilber"
-description   = "A schema-aware d-expression database"
+description   = "A schema-aware d-Doc database"
 license       = "LGPL-2.1-or-later"
 srcDir        = "src"
 installExt    = @["nim"]

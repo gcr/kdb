@@ -1,4 +1,5 @@
-import refSchema
+import docs
+import vocabulary
 import npeg
 import sugar
 import strformat
@@ -15,7 +16,7 @@ import seqUtils
 ## converted into an "unresolved" dexpr,
 ## which is like a dexpr but each symbol
 ## hasn't been resolved yet.
-## Then, these expressions are "resolved" by:
+## Then, these Docs are "resolved" by:
 ## 1. turning symbols into fully-qualified IDs,
 ## 2. consulting the schema to add the
 ##    necessary structure to the children.
@@ -75,7 +76,7 @@ type
     parseFail
   ParseResult* = object
     tokens*: seq[DexprToken]
-    results*: seq[Annotation]
+    results*: seq[Expr]
     case kind*: ParseResultStatus:
     of parseOk:
       original*: seq[DexprToken]
@@ -152,15 +153,15 @@ proc parseToUnresolvedTokenStream*(input: string): seq[DexprToken] =
 # literals immediately follow pushContexts.
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
-# dexpressions like "(foo (bar) (baz <caret-here>"
-proc structuralize*(schema: Schema, input: string): ParseResult =
+# dDocs like "(foo (bar) (baz <caret-here>"
+proc structuralize*(vocab: Vocabulary, input: string, context=""): ParseResult =
   var ps = DexprParseState(strLen: input.len)
-  var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[("", true)]
+  var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[(context, true)]
   let matches = parser.match(input, ps)
   var resolved: seq[DexprToken]
   var unresolvedStream = ps.s
   if not matches.ok:
-    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this expression")
+    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this Doc")
   while unresolvedStream.len > 0:
     var tok = unresolvedStream[0]
 
@@ -176,11 +177,11 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
     of dtkPushNewContext, dtkPushNewContextImplicitly:
       # Descend deeper into the structure!
       # Attempt to resolve symbol
-      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1].key):
+      if Some(@path) ?= vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
-          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:newCtx.key)
-        resolved.add tok.withSym path[^1].key
+          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
+        resolved.add tok.withSym ":"&path[^1].key
         contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
         return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "{tok.symbol} isn't a field of {contexts[^1].key}")
@@ -211,12 +212,12 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
         return ParseResult(kind: parseFail, loc: tok.loc, message: fmt "Tried to implicitly pop out of an explicit context.")
 
     of dtkBareExp:
-      if Some(@path) ?= schema.resolve(tok.symbol, contexts[^1].key):
+      if Some(@path) ?= vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
-          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:newCtx.key)
+          resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
         contexts.add (key: path[^1].key, isExplicit: false)
-        resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:path[^1].key)
+        resolved.add DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&path[^1].key)
       else:
         # Backtrack
         unresolvedStream.insert tok
@@ -227,7 +228,7 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
           resolved.add tok
       else:
         resolved.add(DexprToken(kind: dtkPopContextImplicitly, loc:tok.loc))
-        resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: contexts[^1].key, loc:tok.loc))
+        resolved.add(DexprToken(kind: dtkPushNewContextImplicitly, symbol: ":"&contexts[^1].key, loc:tok.loc))
         resolved.add tok
 
   while contexts.len > 1:
@@ -235,17 +236,31 @@ proc structuralize*(schema: Schema, input: string): ParseResult =
     discard contexts.pop
   return ParseResult(kind: parseOk, tokens: resolved, original: ps.s, contexts: contexts)
 
-proc parse*(schema: Schema, input: string): ParseResult =
-  result = schema.structuralize input
-  var stack: seq[Annotation] = @[Annotation()]
+proc parse*(vocab: Vocabulary, input: string, raw=false): ParseResult =
+  if raw:
+    ## Raw parsing doesn't do any structuralization, so accepts
+    ## any result, even results that don't fit the vocabulary.
+    ## Good for reading directly from the database.
+    var ps = DexprParseState(strLen: input.len)
+    let matches = parser.match(input, ps)
+    if matches.ok:
+      result = ParseResult(kind: parseOk, tokens: ps.s, original: ps.s)
+    else:
+      return ParseResult(kind: parseFail, loc: matches.matchMax, message: fmt"Couldn't parse this input")
+  else:
+    ## Without raw parsing, results are structuralized.
+    result = vocab.structuralize input
+  var stack: seq[Expr] = @[Expr()]
   if result.kind == parseOk:
-    #echo "__ Parsing: ", $result.tokens
     for tok in result.tokens:
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
-        stack.add Annotation(kind: tok.symbol)
+        let symbol: TitleId = tok.symbol
+        if symbol.id == "":
+          return ParseResult(kind: parseFail, loc: tok.loc, message: fmt"This symbol needs an ID: {tok.symbol}")
+        stack.add Expr(kind: symbol.id)
       of BareExp():
-        return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
+        return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare Doc found")
       of PopContext(), PopContextImplicitly():
         stack[^2].children.add stack.pop
       of StrLit(), StrLitIncomplete():
@@ -253,24 +268,4 @@ proc parse*(schema: Schema, input: string): ParseResult =
     result.results = stack[0].children
 
 proc parseRaw*(input: string): ParseResult =
-  var ps = DexprParseState(strLen: input.len)
-  let matches = parser.match(input, ps)
-  if matches.ok:
-    result = ParseResult(kind: parseOk, tokens: ps.s, original: ps.s)
-  else:
-    return ParseResult(kind: parseFail, loc: matches.matchMax, message: "Couldn't parse this expression")
-  var stack: seq[Annotation] = @[Annotation()]
-  for tok in ps.s:
-    case tok:
-    of PushNewContext(), PushNewContextImplicitly():
-      let symbol: TitleId = tok.symbol
-      if symbol.id == "":
-        return ParseResult(kind: parseFail, loc: tok.loc, message: fmt"This symbol needs an ID: {tok.symbol}")
-      stack.add Annotation(kind: symbol.id)
-    of BareExp():
-      return ParseResult(kind: parseFail, loc: tok.loc, message:  "Internal error: Bare expression found")
-    of PopContext(), PopContextImplicitly():
-      stack[^2].children.add stack.pop
-    of StrLit(), StrLitIncomplete():
-      stack[^1].val = tok.value
-  result.results = stack[0].children
+  Vocabulary().parse(input, raw=true)
