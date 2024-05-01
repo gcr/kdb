@@ -2,11 +2,11 @@
 
 version       = "0.1.0"
 author        = "Kimberly Wilber"
-description   = "A schema-aware d-Doc database"
+description   = "A schema-aware Doc database"
 license       = "LGPL-2.1-or-later"
 srcDir        = "src"
 installExt    = @["nim"]
-#bin           = @["ddb"]
+bin           = @["kdb"]
 
 
 # Dependencies

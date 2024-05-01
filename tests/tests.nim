@@ -1,5 +1,5 @@
-import ddb/essentials/[docs, vocabulary, parsing, resolution, repr]
-import ddb/libraries/sqliteLibrary
+import kdbpkg/essentials/[docs, vocabulary, parsing, resolution, repr]
+import kdbpkg/libraries/sqliteLibrary
 import fusion/matching
 import std/unittest
 import std/sequtils
