@@ -121,6 +121,10 @@ var builtins* = MapLibrary()
 proc newMapLibrary*(): MapLibrary =
   MapLibrary(docs: builtins.docs)
 
+iterator allBuiltins*(): Doc =
+  for doc in builtins.docs.values:
+    yield doc
+
 proc makeDoc*(id: ID, items: varargs[Expr]): Doc =
     Doc(key:id, children:items.toSeq)
 proc newExpr*(doc: Doc, val: string="", items: varargs[Expr]= []): Expr =

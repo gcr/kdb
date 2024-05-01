@@ -1,12 +1,15 @@
 import ddb/essentials/[docs, vocabulary, parsing, resolution, repr]
-import ddb/universeBackends/sqliteLibrary
-import unittest
-import sequtils
-import options
-import strutils
-import tables
+import ddb/libraries/sqliteLibrary
 import fusion/matching
-import strformat
+import std/unittest
+import std/sequtils
+import std/options
+import std/strutils
+import std/tables
+import std/strformat
+import std/tempfiles
+import std/files
+import std/paths
 
 suite "Bulit-in refs":
   test "Essential ref operations":
@@ -331,3 +334,22 @@ suite "Structuralization":
     check:
       parseAnnot("(doc \"Hello\") (doc \"World\")")==
        "(doc \"Hello\"), (doc \"World\")"
+
+
+suite "Sqlite library":
+  setup:
+    var (file, name) = createTempFile("sqlite", "db")
+    var lib = openSqliteLibrary name
+  teardown:
+    file.close()
+    removeFile(Path(name))
+
+  test "Fundamentals":
+    check lib.contains(title.key)
+    check lib.contains(vocab.key)
+
+    lib.add: newDoc ":something": title "Foooo"
+    let newDoc = lib.lookup ":something"
+    check newDoc.isSome
+    check newDoc.key == some ":something"
+    check newDoc.get().allTitles == @["Foooo"]
