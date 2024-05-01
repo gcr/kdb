@@ -5,7 +5,6 @@ import std/unittest
 import std/sequtils
 import std/options
 import std/strutils
-import std/tables
 import std/strformat
 import std/tempfiles
 import std/files

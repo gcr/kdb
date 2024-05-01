@@ -1,12 +1,9 @@
 import docs
 import sequtils
-import macros
-import options
 import tables
 import sets
 import strutils
 import strformat
-import fusion/matching
 import hashes
 import tables
 

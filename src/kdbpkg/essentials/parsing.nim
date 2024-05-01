@@ -1,7 +1,6 @@
 import docs
 import vocabulary
 import npeg
-import sugar
 import strformat
 import options
 import fusion/matching

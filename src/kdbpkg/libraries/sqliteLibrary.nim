@@ -1,7 +1,7 @@
 import ../essentials/[docs, parsing, repr, vocabulary]
 import db_connector/db_sqlite
 import fusion/matching
-import std/[envvars, appdirs, paths, strformat, options, sequtils, strutils, dirs]
+import std/[envvars, appdirs, paths, options, sequtils, strutils, dirs]
 
 proc getLibraryPath*(path = ""): Path =
     if path.len > 0:
@@ -68,7 +68,7 @@ proc openSqliteLibrary*(maybePath = ""): SqliteLibrary =
     for builtinDoc in allBuiltins():
         result.addWithoutVersion builtinDoc
 
-method close*(library: SqliteLibrary) =
+proc close*(library: SqliteLibrary) =
     library.db.close()
 
 method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =

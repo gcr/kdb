@@ -3,8 +3,6 @@ import macros
 import options
 import tables
 import sets
-import strutils
-import strformat
 import fusion/matching
 import hashes
 {.experimental: "caseStmtMacros".}
