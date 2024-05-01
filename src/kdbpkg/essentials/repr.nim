@@ -13,6 +13,7 @@ proc reprFull*(expr: Expr): string =
         result &= " "
         result &= $ %*expr.val
     if expr.children.len > 0:
+        result &= " "
         result &= expr.children.mapIt(reprFull it).join(" ")
     result &= ")"
 
@@ -41,4 +42,12 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
     if expr.children.len > 0:
         result &= " "
         result &= expr.children.mapIt(reprHumanFriendly(univ, vocab, it, expr.kind)).join(" ")
+    result &= ")"
+
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, doc: Doc, context = ""): string =
+    result = "("
+    result &= ":" & doc.key
+    if doc.children.len > 0:
+        result &= " "
+        result &= doc.children.mapIt(univ.reprHumanFriendly(vocab, it)).join(" ")
     result &= ")"

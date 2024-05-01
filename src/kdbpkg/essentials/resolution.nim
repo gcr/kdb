@@ -44,11 +44,11 @@ proc titleMatchesNormalized*(a: Doc, b: TitleId): bool =
       if atitle == btitle:
         return true
 
-proc onlyMatch(vocabEntries: HashSet[VocabEntry], title: string, matchMethod: proc(a: Doc, b: TitleID): bool): Option[Doc] =
+proc onlyMatch(vocabEntries: HashSet[Doc], title: string, matchMethod: proc(a: Doc, b: TitleID): bool): Option[Doc] =
   var count = 0
-  for vocabEntry in vocabEntries:
-    if matchMethod(vocabEntry.doc, title):
-      result = some vocabEntry.doc
+  for doc in vocabEntries:
+    if matchMethod(doc, title):
+      result = some doc
       count += 1
   if count > 1:
     result = none(Doc)
@@ -56,29 +56,31 @@ proc onlyMatch(vocabEntries: HashSet[VocabEntry], title: string, matchMethod: pr
 proc resolveDirectly*(vocab: Vocabulary, title: string, context: ID): Option[Doc] =
   for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
     if context in vocab:
-      if Some(@schemaRule) ?= vocab[context].children.onlyMatch(title, mm):
+      if Some(@schemaRule) ?= vocab[context].onlyMatch(title, mm):
         return some schemaRule
 
 proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
-  var seen: HashSet[VocabEntry]
-  var seenTwice: HashSet[VocabEntry]
+  var seen: HashSet[Doc]
+  var seenTwice: HashSet[Doc]
   var paths: Table[Doc, seq[Doc]]
-  var stack: seq[(VocabEntry, seq[Doc])]
+  var stack: seq[(Doc, seq[Doc])]
   # quick DFS
   if context in vocab:
-    stack.add (vocab[context], @[])
+    for nextVocab in vocab[context]:
+      stack.add (nextVocab, @[nextVocab])
     while stack.len > 0:
       let (last, path) = stack.pop()
       seen.incl last
-      paths[last.doc] = path
-      for child in last.children:
-        if child notin seen:
-          stack.add (child, concat(path, @[child.doc]))
+      paths[last] = path
+      for nextVocab in vocab[last.key]:
+        if nextVocab notin seen:
+          stack.add (nextVocab, concat(path, @[nextVocab]))
         else:
-          seenTwice.incl child
+          seenTwice.incl nextVocab
     for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
       if Some(@schemaRule) ?= (seen - seenTwice).onlyMatch(title, mm):
         return some paths[schemaRule]
+  return none(seq[Doc])
 
 proc resolve*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
   if Some(@doc) ?= resolveDirectly(vocab, title, context):

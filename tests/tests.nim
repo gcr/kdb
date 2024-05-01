@@ -9,6 +9,7 @@ import std/strformat
 import std/tempfiles
 import std/files
 import std/paths
+import tables
 
 suite "Bulit-in refs":
   test "Essential ref operations":
@@ -319,6 +320,8 @@ suite "Structuralization":
         "27: Unbalanced parentheses: ')' without a '('"
       structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
         "28: h1 isn't a field of author"
+      structure("title \"Foo\" title \"Bar\"")==
+        "pushi(:hakot-teret) str(Foo) popi pushi(:hakot-teret) str(Bar) popi"
 
   test "Friendly representations":
     check:

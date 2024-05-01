@@ -101,3 +101,8 @@ method searchFor*(library: SqliteLibrary, kind: ID): seq[Doc] =
     for row in library.db.rows(sql"select parent_id from subexpr_cache where child_id = ?", kind):
         if Some(@doc) ?= library.lookup(row[0]):
             result.add doc
+
+#method getSchema*(library: SqliteLibrary): Vocabulary =
+#    if library.vocabCache.isNone:
+#        library.vocabCache = some procCall(Library(library).getSchema())
+#    return library.vocabCache.get()
