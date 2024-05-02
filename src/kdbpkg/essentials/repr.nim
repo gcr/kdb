@@ -17,7 +17,7 @@ proc reprFull*(expr: Expr): string =
         result &= expr.children.mapIt(reprFull it).join(" ")
     result &= ")"
 
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ""): string =
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = "top"): string =
     result = "("
     if Some(@doc) ?= univ.lookup expr.kind:
         block outer:
@@ -44,7 +44,7 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
         result &= expr.children.mapIt(reprHumanFriendly(univ, vocab, it, expr.kind)).join(" ")
     result &= ")"
 
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, doc: Doc, context = ""): string =
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, doc: Doc, context = "top"): string =
     result = "("
     result &= ":" & doc.key
     if doc.children.len > 0:

@@ -40,7 +40,7 @@ suite "Bulit-in refs":
 
   test "Deeply nested refs":
     let
-      head = newDoc "head": vocabFor ""
+      head = newDoc "head": vocabFor "top"
       author = newDoc "auth": vocabFor "head"
       date = newDoc "date": vocabFor "head"
       someDoc = newDoc "someDoc":
@@ -160,10 +160,10 @@ suite "Ref resolution":
     var univ = newMapLibrary()
     univ.add: newDoc "travel":
       title "Travel"
-      vocabFor ""
+      vocabFor "top"
     univ.add: newDoc "dd":
       title "Doc"
-      vocabFor ""
+      vocabFor "top"
     univ.add: newDoc "uuidHead":
       title "Head"
       vocabFor "dd"
@@ -207,17 +207,17 @@ suite "Ref resolution":
   test "Direct resolution":
     let vocab = univ.getFullVocabulary()
     check:
-      vocab.resolveDirectly("Doc", context="").isSome
-      vocab.resolveDirectly("NoMatch", context="").isNone
+      vocab.resolveDirectly("Doc", context="top").isSome
+      vocab.resolveDirectly("NoMatch", context="top").isNone
       vocab.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
-      vocab.resolveDirectly("Title", context="").key == some title.key
-      vocab.resolveDirectly("Date", context="").key == none(ID)
+      vocab.resolveDirectly("Title", context="top").key == some title.key
+      vocab.resolveDirectly("Date", context="top").key == none(ID)
       vocab.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
       vocab.resolveDirectly("DuplicateName", context="uuidHead").isNone
       vocab.resolveDirectly(":someDup2", context="uuidHead").key == some "someDup2"
       vocab.resolveDirectly("NONMATCHING:someDup2", context="uuidHead").isNone
       vocab.resolveDirectly("DuplicateName:someDup1", context="uuidHead").key == some "someDup1"
-      vocab.resolveDirectly("$:omeDup2", context="").isNone
+      vocab.resolveDirectly("$:omeDup2", context="top").isNone
       vocab.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
       vocab.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
       vocab.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
@@ -242,16 +242,16 @@ suite "Ref resolution":
       if Some(@path) ?= vocab.resolveIndirectly(title, context):
         return some path.mapIt(it.key)
     check:
-      resolveIndirectly("name-matchMethod_test", context="").isNone
+      resolveIndirectly("name-matchMethod_test", context="top").isNone
       resolveIndirectly("name-matchMethod_test", context="dd").isNone
-      resolveIndirectly("unambiguousName", context="") == some @["dd", "uuidHead", "someDup2"]
-      resolveIndirectly("unambiguous-name", context="") == some @["dd", "uuidHead", "someDup2"]
+      resolveIndirectly("unambiguousName", context="top") == some @["dd", "uuidHead", "someDup2"]
+      resolveIndirectly("unambiguous-name", context="top") == some @["dd", "uuidHead", "someDup2"]
       resolveIndirectly("unambiguousName", context="dd") == some @["uuidHead", "someDup2"]
       resolveIndirectly("unambiguousName", context="travel").isNone
 
       # only one node appearing in many contexts
-      vocab.resolveDirectly("RecursiveDuplicate", context="").isNone
-      resolveIndirectly("RecursiveDuplicate", context="").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context="top").isNone
+      resolveIndirectly("RecursiveDuplicate", context="top").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context="dd").key == some "recDup"
       resolveIndirectly("RecursiveDuplicate", context="dd").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context="travel").key == some "recDup"
@@ -262,12 +262,29 @@ suite "Ref resolution":
       vocab.resolveDirectly("RecursiveDuplicate", context="recDup").key == some "recDup"
 
       # vocabHas and vocabFor
-      resolveIndirectly("category", context="") == some @["dd", "uuidHead", "category"]
+      resolveIndirectly("category", context="top") == some @["dd", "uuidHead", "category"]
+
+  test "Recursive top resolution":
+    univ.add: newDoc "meh-meh":
+      vocabHas "top"
+      vocabFor "uuidHead"
+      title "recurse"
+    let vocab = univ.getFullVocabulary()
+    check:
+      vocab.resolveDirectly("Doc", context="top").isSome
+      vocab.resolveDirectly("NoMatch", context="top").isNone
+      vocab.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
+      vocab.resolveDirectly("Title", context="top").key == some title.key
+      vocab.resolveDirectly("recurse", context="uuidHead").key == some "meh-meh"
+      # this is the kicker: don't structuralize past Top
+      # otherwise this might resolve to
+      # head->recurse->top->doc->head->recurse...
+      vocab.resolveIndirectly("Doc", context="uuidHead").isNone
 
 suite "Structuralization":
   setup:
     var univ = newMapLibrary()
-    univ.add: newDoc "doc": title "doc"; vocabFor ""
+    univ.add: newDoc "doc": title "doc"; vocabFor "top"
     univ.add: newDoc "head": title "head"; vocabFor "doc"
     univ.add: newDoc "author": title "author"; vocabFor "head"
     univ.add: newDoc "date": title "date"; vocabFor "head"
@@ -279,14 +296,14 @@ suite "Structuralization":
     proc structure(str: string): string =
       var parser = ParseState(input: str, vocab: univ.getFullVocabulary())
       parser.processTokenStream()
-      parser.structuralize("")
+      parser.structuralize("top")
       case parser:
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
     proc parseAnnot(str: string): string =
       let vocab = univ.getFullVocabulary()
       var parser = ParseState(input: str, vocab: vocab)
-      parser.parse("")
+      parser.parse()
       case parser:
       of Ok(results: @results):
         return results.mapIt(reprHumanFriendly(univ, vocab, it)).join(", ")

@@ -74,7 +74,8 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[s
       paths[last] = path
       for nextVocab in vocab[last.key]:
         if nextVocab notin seen:
-          stack.add (nextVocab, concat(path, @[nextVocab]))
+          if nextVocab.key != "top":
+            stack.add (nextVocab, concat(path, @[nextVocab]))
         else:
           seenTwice.incl nextVocab
     for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:

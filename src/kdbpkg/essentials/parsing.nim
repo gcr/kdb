@@ -165,7 +165,7 @@ proc processTokenStream*(p: var ParseState) =
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
 # dDocs like "(foo (bar) (baz <caret-here>"
-proc structuralize*(ps: var ParseState, context="") =
+proc structuralize*(ps: var ParseState, context="top") =
   var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[(context, true)]
   var resolved: Deque[DexprToken]
   var unresolvedstream = ps.tokens.toDeque
@@ -275,7 +275,7 @@ proc processExprs*(ps: var ParseState) =
     ps.results = stack[0].children
 
 
-proc parse*(ps: var ParseState, rootContext = "") =
+proc parse*(ps: var ParseState, rootContext = "top") =
   ps.processTokenStream
   if ps.kind == parseOk:
     if ps.vocab.len > 0:

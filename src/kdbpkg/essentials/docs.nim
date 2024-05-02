@@ -32,9 +32,9 @@ type
         ##                      (Date "2024-01-05"
         ##                        (Visited "Park Güell")
         ##                        (Text "I can't believe...")))
-        ##   "efgh" -> (title "Journal") (vocabFor "")
+        ##   "efgh" -> (title "Journal") (vocabFor "top")
         ##   "ijkl" -> (title "Date") (vocabFor "efgh")
-        ##   "mnop" -> (title "Text") (vocabFor "ijkl") (vocabFor "")
+        ##   "mnop" -> (title "Text") (vocabFor "ijkl") (vocabFor "top")
         ##   "qrst" -> (title "Visited") (vocabFor "ijkl")
         ##
         ## All five Docs live in the database and can be
@@ -43,7 +43,7 @@ type
         ## "mnop", and "qrst" nodes define the vocab that "abcd"
         ## confirms to. Each of these vocab Docs
         ## has an "vocab" Expr pointing to either the ID of
-        ## some parent vocab Doc, or "" to denote that the
+        ## some parent vocab Doc, or "top" to denote that the
         ## Expr should appear at the top level of the Doc.
         ##
         ## There's no separation between data and vocab docs.
@@ -54,8 +54,8 @@ type
         ## too, addressable thanks to some bootstrapping magic and
         ## hard-coded IDs!
         ##
-        ##    "litom-mahut" -> (Title "vocabFor") (vocabFor "")
-        ##    "hakot-teret" -> (Title "Title") (vocabFor "")
+        ##    "litom-mahut" -> (Title "vocabFor") (vocabFor "top")
+        ##    "hakot-teret" -> (Title "Title") (vocabFor "top")
         ##
 
         key*: ID
@@ -175,14 +175,16 @@ macro defBuiltinDoc*(id: string, body: untyped): untyped =
 let
     idVocab = "litom-mahut"
     idTitle = "hakot-teret"
+    topDoc* = defBuiltinDoc "top":
+        idTitle "Top scope"
     vocabFor* = defBuiltinDoc idVocab:
-        idVocab ""
+        idVocab "top"
         idTitle "vocab-for"
     title* = defBuiltinDoc idTitle:
-        vocabFor ""
+        vocabFor "top"
         idTitle "title"
     vocabHas* = defBuiltinDoc "binar-fotar":
-        vocabFor ""
+        vocabFor "top"
         title "vocab-has"
         title "vocab-child"
 

@@ -39,7 +39,7 @@ proc bench() =
   var count = 0
   var vocab = lib.getFullVocabulary()
   for doc in lib.allDocs:
-    #count += reprHumanFriendly(lib, vocab, doc, "").len
+    #count += reprHumanFriendly(lib, vocab, doc, "top").len
     #count += doc.reprFull.len
     discard
   echo fmt"Took {getTime()-begin} sec"
