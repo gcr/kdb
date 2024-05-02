@@ -1,6 +1,6 @@
 import kdbpkg/essentials/[docs, parsing, vocabulary, uuid, repr]
 import kdbpkg/libraries/sqliteLibrary
-import std/[strutils, sequtils, options, streams]
+import std/[strutils, sequtils, options, streams, times, strformat]
 import fusion/matching
 
 proc makeDoc(lib: Library, vocab: Vocabulary, exprs: seq[string]): Option[Doc] =
@@ -30,6 +30,19 @@ proc fromStdin() =
     if Some(@doc) ?= makeDoc(lib, schema, @[line]):
       lib.add doc
 
+proc bench() =
+  var lib = openSqliteLibrary()
+  echo fmt"Iterating through all keys..."
+  let begin = getTime()
+  var count = 0
+  var schema = lib.getSchema()
+  for doc in lib.allDocs:
+    #count += reprHumanFriendly(lib, schema, doc, "").len
+    #count += doc.reprFull.len
+    discard
+  echo fmt"Took {getTime()-begin} sec"
+  echo fmt"and {count.float / 1024.0 / 1024} MB"
+
 proc n(exprs: seq[string]) =
   var lib = openSqliteLibrary()
   if Some(@doc) ?= makeDoc(lib, lib.getSchema(), exprs):
@@ -41,6 +54,7 @@ proc n(exprs: seq[string]) =
 when isMainModule:
   var lib = openSqliteLibrary()
   import cligen
+  bench()
   cligen.dispatchMulti(
-    [p],  [n], [fromStdin]
+    [p],  [n], [fromStdin], [bench]
   )

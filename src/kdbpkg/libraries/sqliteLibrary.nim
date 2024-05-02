@@ -71,6 +71,13 @@ proc openSqliteLibrary*(maybePath = ""): SqliteLibrary =
 proc close*(library: SqliteLibrary) =
     library.db.close()
 
+iterator allDocs*(library: SqliteLibrary): Doc =
+    for row in library.db.rows(sql"select id, val from docs"):
+        var parser = ParseState(input: row[1])
+        parser.parse
+        if parser.kind == parseOk:
+            yield Doc(key: row[0], children: parser.results)
+
 method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     let row = library.db.getRow(sql"select id, val from docs where id=?", id)
     if row[0] == "":
