@@ -14,6 +14,7 @@ proc makeDoc(lib: Library, vocab: Vocabulary, exprs: seq[string]): Option[Doc] =
   else:
     echo exprs.join(" ")
     stderr.write("Couldn't parse\n")
+    stderr.write(parser.message)
     quit 1
 
 proc p(exprs: seq[string]) =
@@ -25,10 +26,11 @@ proc p(exprs: seq[string]) =
 proc fromStdin() =
   var lib = openSqliteLibrary()
   let schema = lib.getSchema()
+  var strm = newFileStream "/tmp/foo.exprs"
   while true:
-    let line = stdin.readLine()
+    let line = strm.readLine()
     if Some(@doc) ?= makeDoc(lib, schema, @[line]):
-      lib.add doc
+      discard lib.add doc
 
 proc bench() =
   var lib = openSqliteLibrary()
@@ -54,7 +56,6 @@ proc n(exprs: seq[string]) =
 when isMainModule:
   var lib = openSqliteLibrary()
   import cligen
-  bench()
   cligen.dispatchMulti(
     [p],  [n], [fromStdin], [bench]
   )

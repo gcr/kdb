@@ -207,9 +207,9 @@ proc first*(a: Expr, b: Doc): Option[Expr] =
 # Convenience methods
 proc firstTitle*(doc: Doc): Option[string] =
   return (doc.first title).val
-proc allTitles*(doc: Doc): seq[string] =
+iterator allTitles*(doc: Doc): string =
   for expr in doc / title:
-    result.add expr.val
+    yield expr.val
 
 method searchFor*(library: Library, kind: ID): seq[Doc] {.base.} = discard
 method searchFor*(library: MapLibrary, kind: ID): seq[Doc] =

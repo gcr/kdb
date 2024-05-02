@@ -22,7 +22,7 @@ proc `$`*(schema: Vocabulary): string =
   for k, vals in schema.pairs:
     result &= fmt"- {$k}: "
     for val in vals:
-      result &= val.allTitles.toSeq.join(",") & ":" & $val.key
+      result &= val.allTitles.toSeq.join(",") #& ":" & $val.key
       result &= " "
     result &= "\n"
 
@@ -30,11 +30,9 @@ proc `$`*(schema: Vocabulary): string =
 
 method getSchema*(library: Library): Vocabulary {.base.} =
   template ensureExists(key: ID): untyped =
-    result.mgetOrPut(key, HashSet[Doc]())
+    discard result.mgetOrPut(key, HashSet[Doc]())
   for doc in library.searchFor docs.vocab.key:
-    var schemarule = ensureExists(doc.key)
-    schemarule.incl doc
+    ensureExists(doc.key)
     for allowedParent in doc / docs.vocab:
-      discard ensureExists(allowedParent.val)
+      ensureExists(allowedParent.val)
       result[allowedParent.val].incl doc
-      #result[allowedParent.val].children.incl result[doc.key]

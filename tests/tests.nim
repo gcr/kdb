@@ -17,7 +17,7 @@ suite "Bulit-in refs":
       vocab.has title
       vocab.hasEqual title, "vocab"
       not vocab.hasEqual(title, "something else")
-      vocab.allTitles == @["vocab"]
+      vocab.allTitles.toSeq == @["vocab"]
       vocab.firstTitle == some "vocab"
 
   test "Check titles of child Exprs":
@@ -36,7 +36,7 @@ suite "Bulit-in refs":
     check not x.has vocab
     check x.hasEqual(title, "one")
     check x.hasEqual(title, "two")
-    check x.allTitles == @["one", "two"]
+    check x.allTitles.toSeq == @["one", "two"]
 
   test "Deeply nested refs":
     let
@@ -66,7 +66,7 @@ suite "Bulit-in refs":
   test "Making ephemeral refs doesn't touch builtins":
     let x = newDoc "abc": title "something"
     check:
-      @["something"] == x.allTitles
+      @["something"] == x.allTitles.toSeq
       not title.has(x)
 
 suite "Dexpr parsing":
@@ -231,6 +231,7 @@ suite "Ref resolution":
       vocab "travel"
       vocab "dd"
       vocab "uuidHead"
+      vocab "RecursiveDuplicate"
     univ.add travelHead
     let schema = univ.getSchema()
     proc resolveIndirectly(title: string, context: ID): Option[seq[string]] =
@@ -250,6 +251,7 @@ suite "Ref resolution":
       resolveIndirectly("RecursiveDuplicate", context="travel").isSome
       resolveIndirectly("RecursiveDuplicate", context="travel") == some @["recDup"]
       resolveIndirectly("RecursiveDuplicate", context="uuidHead") == some @["recDup"]
+      resolveIndirectly("RecursiveDuplicate", context="RecursiveDuplicate") == some @["recDup"]
 
 suite "Structuralization":
   setup:
@@ -322,6 +324,14 @@ suite "Structuralization":
         "28: h1 isn't a field of author"
       structure("title \"Foo\" title \"Bar\"")==
         "pushi(:hakot-teret) str(Foo) popi pushi(:hakot-teret) str(Bar) popi"
+      structure("title \"Foo\" author title \"Bar\"")==
+        "pushi(:hakot-teret) str(Foo) popi pushi(:doc) pushi(:head) pushi(:author) popi popi popi pushi(:hakot-teret) str(Bar) popi"
+      structure("author author author ")==
+        "pushi(:doc) pushi(:head) pushi(:author) popi pushi(:author) popi pushi(:author) popi popi popi"
+      structure("author (author (author)) ")==
+        "8: author isn't a field of author"
+      structure("head author \"Foo\" head author \"Bar\" author \"Baz\" head head")==
+        "pushi(:doc) pushi(:head) pushi(:author) str(Foo) popi popi pushi(:head) pushi(:author) str(Bar) popi pushi(:author) str(Baz) popi popi pushi(:head) popi pushi(:head) popi popi"
 
   test "Friendly representations":
     check:
@@ -354,4 +364,4 @@ suite "Sqlite library":
     let newDoc = lib.lookup ":something"
     check newDoc.isSome
     check newDoc.key == some ":something"
-    check newDoc.get().allTitles == @["Foooo"]
+    check newDoc.get().allTitles.toSeq == @["Foooo"]
