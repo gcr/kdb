@@ -56,8 +56,8 @@ proc onlyMatch(vocabEntries: HashSet[Doc], title: string, matchMethod: proc(a: D
 proc resolveDirectly*(vocab: Vocabulary, title: string, context: ID): Option[Doc] =
   for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
     if context in vocab:
-      if Some(@schemaRule) ?= vocab[context].onlyMatch(title, mm):
-        return some schemaRule
+      if Some(@vocabRule) ?= vocab[context].onlyMatch(title, mm):
+        return some vocabRule
 
 proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
   var seen: HashSet[Doc]
@@ -78,8 +78,8 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[s
         else:
           seenTwice.incl nextVocab
     for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
-      if Some(@schemaRule) ?= (seen - seenTwice).onlyMatch(title, mm):
-        return some paths[schemaRule]
+      if Some(@vocabRule) ?= (seen - seenTwice).onlyMatch(title, mm):
+        return some paths[vocabRule]
   return none(seq[Doc])
 
 proc resolve*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =

@@ -6,6 +6,8 @@ import strutils
 import strformat
 import hashes
 import tables
+import options
+import fusion/matching
 
 type
   Vocabulary* = Table[string, HashSet[Doc]]
@@ -17,9 +19,9 @@ proc hash*(expr: Expr): Hash =
   result = !$result
 #proc hash*(sr: VocabEntry): Hash =
 #  result = !$ (result !& sr.doc.hash)
-proc `$`*(schema: Vocabulary): string =
+proc `$`*(vocab: Vocabulary): string =
   ## for debugging
-  for k, vals in schema.pairs:
+  for k, vals in vocab.pairs:
     result &= fmt"- {$k}: "
     for val in vals:
       result &= val.allTitles.toSeq.join(",") #& ":" & $val.key
@@ -28,11 +30,30 @@ proc `$`*(schema: Vocabulary): string =
 
 
 
-method getSchema*(library: Library): Vocabulary {.base.} =
-  template ensureExists(key: ID): untyped =
-    discard result.mgetOrPut(key, HashSet[Doc]())
-  for doc in library.searchFor docs.vocab.key:
-    ensureExists(doc.key)
-    for allowedParent in doc / docs.vocab:
-      ensureExists(allowedParent.val)
-      result[allowedParent.val].incl doc
+method getFullVocabulary*(library: Library): Vocabulary {.base.} =
+  template addVocab(k: ID, d: Doc): untyped =
+    ### Indicate that d directly follows k
+    if k notin result:
+       result[k]=HashSet[Doc]()
+    if d.key notin result:
+      result[d.key]=HashSet[Doc]()
+    result[k].incl d
+  var docCache: Table[ID, Doc]
+  proc lookupDoc(key: ID): Option[Doc]=
+    if key notin docCache:
+      if Some(@doc) ?= library.lookup key:
+        docCache[key] = doc
+        return some doc
+
+  ## Docs with (vocab-for ":something") can nest inside :something
+  ## expressions
+  for nextDoc in library.searchFor vocabFor.key:
+    for prev in nextDoc / vocabFor:
+      addVocab(prev.val, nextDoc)
+  ## Docs with (vocab-has ":something") can contain :something
+  ## expressions. Typically these also need to be "vocab for"
+  ## some other node to be resolved anywhere.
+  for prevDoc in library.searchFor vocabHas.key:
+    for next in prevDoc / vocabHas:
+      if Some(@nextDoc) ?= lookupDoc(next.val):
+        addVocab(prevDoc.key, nextDoc)

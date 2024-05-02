@@ -18,7 +18,7 @@ import deques
 ## hasn't been resolved yet.
 ## Then, these Docs are "resolved" by:
 ## 1. turning symbols into fully-qualified IDs,
-## 2. consulting the schema to add the
+## 2. consulting the vocab to add the
 ##    necessary structure to the children.
 ##
 ## Example:
@@ -27,7 +27,7 @@ import deques
 ##         span "hello"
 ##         h1
 ##         span "Test")
-## After resolution with an appropriate schema,
+## After resolution with an appropriate vocab,
 ## this might be structuralized to something like:
 ## -> (doc (title (date "2024"))
 ##         (p (span "hello"))
@@ -158,7 +158,7 @@ proc processTokenStream*(p: var ParseState) =
     p.loc = matches.matchMax
     p.message = "Failed to parse"
 
-# A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate schema backtracking.
+# A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate vocab backtracking.
 # All pushes and pops are guaranteed to
 # be balanced* and all string
 # literals immediately follow pushContexts.

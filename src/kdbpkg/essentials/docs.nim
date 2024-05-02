@@ -32,18 +32,18 @@ type
         ##                      (Date "2024-01-05"
         ##                        (Visited "Park Güell")
         ##                        (Text "I can't believe...")))
-        ##   "efgh" -> (title "Journal") (vocab "")
-        ##   "ijkl" -> (title "Date") (vocab "efgh")
-        ##   "mnop" -> (title "Text") (vocab "ijkl") (vocab "")
-        ##   "qrst" -> (title "Visited") (vocab "ijkl")
+        ##   "efgh" -> (title "Journal") (vocabFor "")
+        ##   "ijkl" -> (title "Date") (vocabFor "efgh")
+        ##   "mnop" -> (title "Text") (vocabFor "ijkl") (vocabFor "")
+        ##   "qrst" -> (title "Visited") (vocabFor "ijkl")
         ##
         ## All five Docs live in the database and can be
         ## edited in the same way. The "abcd" node contains the
         ## bulk of the data content, while the "efgh", "ijkl",
-        ## "mnop", and "qrst" nodes define the schema that "abcd"
-        ## confirms to. Each of these schema Docs
+        ## "mnop", and "qrst" nodes define the vocab that "abcd"
+        ## confirms to. Each of these vocab Docs
         ## has an "vocab" Expr pointing to either the ID of
-        ## some parent schema Doc, or "" to denote that the
+        ## some parent vocab Doc, or "" to denote that the
         ## Expr should appear at the top level of the Doc.
         ##
         ## There's no separation between data and vocab docs.
@@ -54,8 +54,8 @@ type
         ## too, addressable thanks to some bootstrapping magic and
         ## hard-coded IDs!
         ##
-        ##    "litom-mahut" -> (Title "Vocab") (Vocab "")
-        ##    "hakot-teret" -> (Title "Title") (Vocab "")
+        ##    "litom-mahut" -> (Title "vocabFor") (vocabFor "")
+        ##    "hakot-teret" -> (Title "Title") (vocabFor "")
         ##
 
         key*: ID
@@ -98,7 +98,7 @@ method lookup*(library: Library, id: ID): Option[Doc] {.base.} = none(Doc)
 method lookup*(library: MapLibrary, id: ID): Option[Doc] =
   if id in library.docs: return some(library.docs[id])
 proc lookupDocForExpr*(library: Library, expr: Expr): Option[Doc] =
-  ## returns the schema-defining Doc for a given Expr
+  ## returns the vocab-defining Doc for a given Expr
   return library.lookup(expr.kind)
 
 
@@ -175,16 +175,20 @@ macro defBuiltinDoc*(id: string, body: untyped): untyped =
 let
     idVocab = "litom-mahut"
     idTitle = "hakot-teret"
-    vocab* = defBuiltinDoc idVocab:
+    vocabFor* = defBuiltinDoc idVocab:
         idVocab ""
-        idTitle "vocab"
+        idTitle "vocab-for"
     title* = defBuiltinDoc idTitle:
-        vocab ""
+        vocabFor ""
         idTitle "title"
+    vocabHas* = defBuiltinDoc "binar-fotar":
+        vocabFor ""
+        title "vocab-has"
+        title "vocab-child"
 
 # Basic ops
 # IMPORTANT: We never want to call a / b when b is an Expr.
-# Said another way, only Docs define schema, not Exprs.
+# Said another way, only Docs define vocab, not Exprs.
 # The converter above allows the converse and not this,
 # which is correct behavior.
 iterator `/`*(a: Expr, b: Doc): Expr =

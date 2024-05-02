@@ -19,17 +19,17 @@ proc makeDoc(lib: Library, vocab: Vocabulary, exprs: seq[string]): Option[Doc] =
 
 proc p(exprs: seq[string]) =
   var lib = openSqliteLibrary()
-  if Some(@doc) ?= makeDoc(lib, lib.getSchema(), exprs):
+  if Some(@doc) ?= makeDoc(lib, lib.getFullVocabulary(), exprs):
     echo doc.reprFull
-    echo lib.reprHumanFriendly(lib.getSchema(), doc)
+    echo lib.reprHumanFriendly(lib.getFullVocabulary(), doc)
 
 proc fromStdin() =
   var lib = openSqliteLibrary()
-  let schema = lib.getSchema()
+  let vocab = lib.getFullVocabulary()
   var strm = newFileStream "/tmp/foo.exprs"
   while true:
     let line = strm.readLine()
-    if Some(@doc) ?= makeDoc(lib, schema, @[line]):
+    if Some(@doc) ?= makeDoc(lib, vocab, @[line]):
       discard lib.add doc
 
 proc bench() =
@@ -37,9 +37,9 @@ proc bench() =
   echo fmt"Iterating through all keys..."
   let begin = getTime()
   var count = 0
-  var schema = lib.getSchema()
+  var vocab = lib.getFullVocabulary()
   for doc in lib.allDocs:
-    #count += reprHumanFriendly(lib, schema, doc, "").len
+    #count += reprHumanFriendly(lib, vocab, doc, "").len
     #count += doc.reprFull.len
     discard
   echo fmt"Took {getTime()-begin} sec"
@@ -47,9 +47,9 @@ proc bench() =
 
 proc n(exprs: seq[string]) =
   var lib = openSqliteLibrary()
-  if Some(@doc) ?= makeDoc(lib, lib.getSchema(), exprs):
+  if Some(@doc) ?= makeDoc(lib, lib.getFullVocabulary(), exprs):
     echo doc.reprFull
-    echo lib.reprHumanFriendly(lib.getSchema(), doc)
+    echo lib.reprHumanFriendly(lib.getFullVocabulary(), doc)
     lib.add(doc)
     echo "Added."
 

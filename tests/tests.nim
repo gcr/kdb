@@ -14,17 +14,17 @@ import tables
 suite "Bulit-in refs":
   test "Essential ref operations":
     check:
-      vocab.has title
-      vocab.hasEqual title, "vocab"
-      not vocab.hasEqual(title, "something else")
-      vocab.allTitles.toSeq == @["vocab"]
-      vocab.firstTitle == some "vocab"
+      vocabFor.has title
+      vocabFor.hasEqual title, "vocab-for"
+      not vocabFor.hasEqual(title, "something else")
+      vocabFor.allTitles.toSeq == @["vocab-for"]
+      vocabFor.firstTitle == some "vocab-for"
 
   test "Check titles of child Exprs":
-    let docs: seq[Doc] = vocab.items.toSeq.mapIt(
+    let docs: seq[Doc] = vocabFor.items.toSeq.mapIt(
       builtins.lookup(it.kind).get())
     let titles = docs.mapIt(it.firstTitle)
-    check titles == @[some "vocab", some "title"]
+    check titles == @[some "vocab-for", some "title"]
 
   test "Multiple children":
     let x = newDoc "multichild":
@@ -33,16 +33,16 @@ suite "Bulit-in refs":
     check x.firstTitle == some "one"
     check (x / title).toSeq.mapIt(it.val) == @["one", "two"]
     check x.has title
-    check not x.has vocab
+    check not x.has vocabFor
     check x.hasEqual(title, "one")
     check x.hasEqual(title, "two")
     check x.allTitles.toSeq == @["one", "two"]
 
   test "Deeply nested refs":
     let
-      head = newDoc "head": vocab ""
-      author = newDoc "auth": vocab "head"
-      date = newDoc "date": vocab "head"
+      head = newDoc "head": vocabFor ""
+      author = newDoc "auth": vocabFor "head"
+      date = newDoc "date": vocabFor "head"
       someDoc = newDoc "someDoc":
           head:
             author "Kimmmy"
@@ -60,7 +60,7 @@ suite "Bulit-in refs":
 
 
   test "Builtins is populated":
-    check builtins.contains vocab.key
+    check builtins.contains vocabFor.key
     check builtins.contains title.key
 
   test "Making ephemeral refs doesn't touch builtins":
@@ -157,41 +157,45 @@ suite "Dexpr parsing":
 
 suite "Ref resolution":
   setup:
-    let
-        travel = newDoc "travel":
-            title "Travel"
-            vocab ""
-        doc = newDoc "dd":
-            title "Doc"
-            vocab ""
-        head = newDoc "uuidHead":
-            title "Head"
-            vocab "dd"
-        date = newDoc "uuidDate":
-            title "Date"
-            vocab "uuidHead"
-        innertitle = newDoc "titleButInsideHead":
-            title "Title"
-            vocab "uuidHead"
-        dup1 = newDoc "someDup1":
-            title "DuplicateName"
-            vocab "uuidHead"
-        dup2 = newDoc "someDup2":
-            title "DuplicateName"
-            title "UnambiguousName"
-            vocab "uuidHead"
-        dup3 = newDoc "someDup3":
-            title "NameMatchMethodTest"
-            vocab "uuidHead"
-        dup4 = newDoc "someDup4":
-            title "name_match_method_test"
-            vocab "uuidHead"
     var univ = newMapLibrary()
-    univ.add doc, head, date, innertitle, dup1, dup2, dup3, dup4, travel
+    univ.add: newDoc "travel":
+      title "Travel"
+      vocabFor ""
+    univ.add: newDoc "dd":
+      title "Doc"
+      vocabFor ""
+    univ.add: newDoc "uuidHead":
+      title "Head"
+      vocabFor "dd"
+      vocabHas "category"
+      vocabHas "someDup2"
+      vocabHas "undefined-lololol"
+    univ.add: newDoc "uuidDate":
+      title "Date"
+      vocabFor "uuidHead"
+    univ.add: newDoc "titleButInsideHead":
+      title "Title"
+      vocabFor "uuidHead"
+    univ.add: newDoc "someDup1":
+      title "DuplicateName"
+      vocabFor "uuidHead"
+    univ.add: newDoc "someDup2":
+      title "DuplicateName"
+      title "UnambiguousName"
+    univ.add: newDoc "someDup3":
+      title "NameMatchMethodTest"
+      vocabFor "uuidHead"
+    univ.add: newDoc "someDup4":
+      title "name_match_method_test"
+      vocabFor "uuidHead"
+    univ.add: newDoc "category":
+      title "category"
+      title "A descendant of head"
 
   test "Unpolluted builtins":
-    check doc.key in univ
-    check doc.key notin builtins
+    check "dd" in univ
+    check "dd" notin builtins
+    check "category" in univ
 
   test "ID parsing":
     check "foo".toTitleId == TitleId(title: "foo", id: "")
@@ -201,41 +205,41 @@ suite "Ref resolution":
     check ":".toTitleId == TitleId(title: "", id: "")
 
   test "Direct resolution":
-    let schema = univ.getSchema()
+    let vocab = univ.getFullVocabulary()
     check:
-      schema.resolveDirectly("Doc", context="").isSome
-      schema.resolveDirectly("NoMatch", context="").isNone
-      schema.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
-      schema.resolveDirectly("Title", context="").key == some title.key
-      schema.resolveDirectly("Date", context="").key == none(ID)
-      schema.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
-      schema.resolveDirectly("DuplicateName", context="uuidHead").isNone
-      schema.resolveDirectly(":someDup2", context="uuidHead").key == some "someDup2"
-      schema.resolveDirectly("NONMATCHING:someDup2", context="uuidHead").isNone
-      schema.resolveDirectly("DuplicateName:someDup1", context="uuidHead").key == some "someDup1"
-      schema.resolveDirectly("$:omeDup2", context="").isNone
-      schema.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
-      schema.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
-      schema.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
+      vocab.resolveDirectly("Doc", context="").isSome
+      vocab.resolveDirectly("NoMatch", context="").isNone
+      vocab.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
+      vocab.resolveDirectly("Title", context="").key == some title.key
+      vocab.resolveDirectly("Date", context="").key == none(ID)
+      vocab.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
+      vocab.resolveDirectly("DuplicateName", context="uuidHead").isNone
+      vocab.resolveDirectly(":someDup2", context="uuidHead").key == some "someDup2"
+      vocab.resolveDirectly("NONMATCHING:someDup2", context="uuidHead").isNone
+      vocab.resolveDirectly("DuplicateName:someDup1", context="uuidHead").key == some "someDup1"
+      vocab.resolveDirectly("$:omeDup2", context="").isNone
+      vocab.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
+      vocab.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
+      vocab.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
+      vocab.resolveDirectly("category", context="uuidHead").key == some "category"
 
   test "Resolution order should matter":
-    let schema = univ.getSchema()
+    let vocab = univ.getFullVocabulary()
     check:
-      schema.resolveDirectly("name-matchMethod_test", context="uuidHead").isNone
-      schema.resolveDirectly("name_match_method_test", context="uuidHead").key == some "someDup4"
-      schema.resolveDirectly("NameMatchMethodTest", context="uuidHead").key == some "someDup3"
-      schema.resolveDirectly("nameMatchMethodTest", context="uuidHead").isNone
+      vocab.resolveDirectly("name-matchMethod_test", context="uuidHead").isNone
+      vocab.resolveDirectly("name_match_method_test", context="uuidHead").key == some "someDup4"
+      vocab.resolveDirectly("NameMatchMethodTest", context="uuidHead").key == some "someDup3"
+      vocab.resolveDirectly("nameMatchMethodTest", context="uuidHead").isNone
   test "Indirect resolution":
-    let travelHead = newDoc "recDup":
+    univ.add: newDoc "recDup":
       title "RecursiveDuplicate"
-      vocab "travel"
-      vocab "dd"
-      vocab "uuidHead"
-      vocab "RecursiveDuplicate"
-    univ.add travelHead
-    let schema = univ.getSchema()
+      vocabFor "travel"
+      vocabFor "dd"
+      vocabFor "uuidHead"
+      vocabFor "recDup"
+    let vocab = univ.getFullVocabulary()
     proc resolveIndirectly(title: string, context: ID): Option[seq[string]] =
-      if Some(@path) ?= schema.resolveIndirectly(title, context):
+      if Some(@path) ?= vocab.resolveIndirectly(title, context):
         return some path.mapIt(it.key)
     check:
       resolveIndirectly("name-matchMethod_test", context="").isNone
@@ -246,39 +250,46 @@ suite "Ref resolution":
       resolveIndirectly("unambiguousName", context="travel").isNone
 
       # only one node appearing in many contexts
+      vocab.resolveDirectly("RecursiveDuplicate", context="").isNone
       resolveIndirectly("RecursiveDuplicate", context="").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context="dd").key == some "recDup"
       resolveIndirectly("RecursiveDuplicate", context="dd").isNone
-      resolveIndirectly("RecursiveDuplicate", context="travel").isSome
-      resolveIndirectly("RecursiveDuplicate", context="travel") == some @["recDup"]
-      resolveIndirectly("RecursiveDuplicate", context="uuidHead") == some @["recDup"]
-      resolveIndirectly("RecursiveDuplicate", context="RecursiveDuplicate") == some @["recDup"]
+      vocab.resolveDirectly("RecursiveDuplicate", context="travel").key == some "recDup"
+      resolveIndirectly("RecursiveDuplicate", context="travel").isNone
+      resolveIndirectly("RecursiveDuplicate", context="uuidHead").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context="uuidHead").key == some "recDup"
+      resolveIndirectly("RecursiveDuplicate", context="recDup").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context="recDup").key == some "recDup"
+
+      # vocabHas and vocabFor
+      resolveIndirectly("category", context="") == some @["dd", "uuidHead", "category"]
 
 suite "Structuralization":
   setup:
     var univ = newMapLibrary()
-    univ.add: newDoc "doc": title "doc"; vocab ""
-    univ.add: newDoc "head": title "head"; vocab "doc"
-    univ.add: newDoc "author": title "author"; vocab "head"
-    univ.add: newDoc "date": title "date"; vocab "head"
-    univ.add: newDoc "body": title "body"; vocab "doc"
-    univ.add: newDoc "h1": title "h1"; vocab "body"
-    univ.add: newDoc "span": title "span"; vocab "h1"; vocab "body"
-    univ.add: newDoc "dup1": title "dup"; vocab "body"; vocab "body"
-    univ.add: newDoc "dup2": title "dup"; title "dup2"; vocab "body"; vocab "body"
+    univ.add: newDoc "doc": title "doc"; vocabFor ""
+    univ.add: newDoc "head": title "head"; vocabFor "doc"
+    univ.add: newDoc "author": title "author"; vocabFor "head"
+    univ.add: newDoc "date": title "date"; vocabFor "head"
+    univ.add: newDoc "body": title "body"; vocabFor "doc"
+    univ.add: newDoc "h1": title "h1"; vocabFor "body"
+    univ.add: newDoc "span": title "span"; vocabFor "h1"; vocabFor "body"
+    univ.add: newDoc "dup1": title "dup"; vocabFor "body"; vocabFor "body"
+    univ.add: newDoc "dup2": title "dup"; title "dup2"; vocabFor "body"; vocabFor "body"
     proc structure(str: string): string =
-      var parser = ParseState(input: str, vocab: univ.getSchema())
+      var parser = ParseState(input: str, vocab: univ.getFullVocabulary())
       parser.processTokenStream()
       parser.structuralize("")
       case parser:
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
     proc parseAnnot(str: string): string =
-      let schema = univ.getSchema()
-      var parser = ParseState(input: str, vocab: schema)
+      let vocab = univ.getFullVocabulary()
+      var parser = ParseState(input: str, vocab: vocab)
       parser.parse("")
       case parser:
       of Ok(results: @results):
-        return results.mapIt(reprHumanFriendly(univ, schema, it)).join(", ")
+        return results.mapIt(reprHumanFriendly(univ, vocab, it)).join(", ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
 
 
@@ -358,7 +369,7 @@ suite "Sqlite library":
 
   test "Fundamentals":
     check lib.contains(title.key)
-    check lib.contains(vocab.key)
+    check lib.contains(vocabFor.key)
 
     lib.add: newDoc ":something": title "Foooo"
     let newDoc = lib.lookup ":something"

@@ -109,7 +109,7 @@ method searchFor*(library: SqliteLibrary, kind: ID): seq[Doc] =
         if Some(@doc) ?= library.lookup(row[0]):
             result.add doc
 
-#method getSchema*(library: SqliteLibrary): Vocabulary =
+#method getFullVocabulary*(library: SqliteLibrary): Vocabulary =
 #    if library.vocabCache.isNone:
-#        library.vocabCache = some procCall(Library(library).getSchema())
+#        library.vocabCache = some procCall(Library(library).getFullVocabulary())
 #    return library.vocabCache.get()
