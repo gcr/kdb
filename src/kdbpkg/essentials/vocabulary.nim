@@ -10,7 +10,7 @@ import options
 import fusion/matching
 
 type
-  Vocabulary* = Table[string, HashSet[Doc]]
+  Vocabulary* = Table[ID, HashSet[Doc]]
   #VocabEntry* = ref object
   #  doc*: Doc
   #  children*: HashSet[VocabEntry] ## mapping titles to these objects
@@ -22,7 +22,7 @@ proc hash*(expr: Expr): Hash =
 proc `$`*(vocab: Vocabulary): string =
   ## for debugging
   for k, vals in vocab.pairs:
-    result &= fmt"- {$k}: "
+    result &= fmt"- {$k} "
     for val in vals:
       result &= val.allTitles.toSeq.join(",") #& ":" & $val.key
       result &= " "
@@ -49,11 +49,11 @@ method getFullVocabulary*(library: Library): Vocabulary {.base.} =
   ## expressions
   for nextDoc in library.searchFor vocabFor.key:
     for prev in nextDoc / vocabFor:
-      addVocab(prev.val, nextDoc)
+      addVocab(toId(prev.val), nextDoc)
   ## Docs with (vocab-has ":something") can contain :something
   ## expressions. Typically these also need to be "vocab for"
   ## some other node to be resolved anywhere.
   for prevDoc in library.searchFor vocabHas.key:
     for next in prevDoc / vocabHas:
-      if Some(@nextDoc) ?= lookupDoc(next.val):
+      if Some(@nextDoc) ?= lookupDoc(next.val.toId):
         addVocab(prevDoc.key, nextDoc)

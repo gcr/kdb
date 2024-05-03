@@ -11,14 +11,15 @@ import sequtils
 
 type TitleId* = object
     title*: string
-    id*: string
+    id*: ID
 
 converter toTitleId*(x: string): TitleId =
     let idx = x.find ':'
     if idx == -1: result.title = x
     else:
         result.title = x[0..<idx]
-        result.id = x[idx+1..x.high]
+        if x[idx..x.high] != ":":
+          result.id = toId(x[idx..x.high])
 
 proc uidMatches*(a: Doc, b: TitleId): bool =
   if b.id.len > 0:
@@ -74,7 +75,7 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[s
       paths[last] = path
       for nextVocab in vocab[last.key]:
         if nextVocab notin seen:
-          if nextVocab.key != "top":
+          if nextVocab.key != ":top".toID:
             stack.add (nextVocab, concat(path, @[nextVocab]))
         else:
           seenTwice.incl nextVocab

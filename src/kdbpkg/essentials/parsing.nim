@@ -66,7 +66,7 @@ proc `$`*(dt: DexprToken): string =
   of dtkStrLit: fmt"str({dt.value})"
   of dtkStrLitIncomplete: fmt"stri({dt.value})"
 
-proc withSym(tok: DexprToken, id: ID): DexprToken =
+proc withSym(tok: DexprToken, id: string): DexprToken =
   DexprToken(kind:tok.kind, loc:tok.loc, symbol: id, value: tok.value)
 
 
@@ -165,7 +165,7 @@ proc processTokenStream*(p: var ParseState) =
 # EXCEPTION: final popImplicitContexts may be omitted,
 # to support incremental parsing of incomplete
 # dDocs like "(foo (bar) (baz <caret-here>"
-proc structuralize*(ps: var ParseState, context="top") =
+proc structuralize*(ps: var ParseState, context=":top".toID) =
   var contexts: seq[tuple[key: ID, isExplicit: bool]] = @[(context, true)]
   var resolved: Deque[DexprToken]
   var unresolvedstream = ps.tokens.toDeque
@@ -192,8 +192,8 @@ proc structuralize*(ps: var ParseState, context="top") =
       if Some(@path) ?= ps.vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
-          resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
-        resolved.addLast tok.withSym ":"&path[^1].key
+          resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol: $newCtx.key)
+        resolved.addLast tok.withSym $path[^1].key
         contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
         fail "{tok.symbol} isn't a field of {contexts[^1].key}"
@@ -227,9 +227,9 @@ proc structuralize*(ps: var ParseState, context="top") =
       if Some(@path) ?= ps.vocab.resolve(tok.symbol, contexts[^1].key):
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
-          resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&newCtx.key)
+          resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol: $newCtx.key)
         contexts.add (key: path[^1].key, isExplicit: false)
-        resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol:":"&path[^1].key)
+        resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly, loc:tok.loc, symbol: $path[^1].key)
       else:
         # Backtrack
         unresolvedStream.addFirst tok
@@ -240,7 +240,7 @@ proc structuralize*(ps: var ParseState, context="top") =
           resolved.addLast tok
       else:
         resolved.addLast(DexprToken(kind: dtkPopContextImplicitly, loc:tok.loc))
-        resolved.addLast(DexprToken(kind: dtkPushNewContextImplicitly, symbol: ":"&contexts[^1].key, loc:tok.loc))
+        resolved.addLast(DexprToken(kind: dtkPushNewContextImplicitly, symbol: $contexts[^1].key, loc:tok.loc))
         resolved.addLast tok
 
   ps.incompleteContexts = contexts
@@ -263,7 +263,7 @@ proc processExprs*(ps: var ParseState) =
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
         let symbol: TitleId = tok.symbol
-        if symbol.id == "":
+        if $symbol.id == "":
           fail "This symbol must start with a colon: {tok.symbol}"
         stack.add Expr(kind: symbol.id)
       of BareExp():
@@ -275,7 +275,7 @@ proc processExprs*(ps: var ParseState) =
     ps.results = stack[0].children
 
 
-proc parse*(ps: var ParseState, rootContext = "top") =
+proc parse*(ps: var ParseState, rootContext = ":top".toID) =
   ps.processTokenStream
   if ps.kind == parseOk:
     if ps.vocab.len > 0:

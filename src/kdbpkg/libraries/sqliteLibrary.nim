@@ -24,7 +24,7 @@ proc addWithoutVersion(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discar
         library.db.exec(sql"""
         insert into Docs(id, val, lastModified) values(?, ?, unixepoch('subsec'))
         on conflict(id) do update set val=excluded.val, lastModified=unixepoch('subsec');
-        """, doc.key, doc.children.mapIt(it.reprFull).join(" "))
+        """, doc.key, doc.children.mapIt($it).join(" "))
         library.db.exec(sql"delete from subexpr_cache where parent_id = ?;", doc.key)
         for expr in doc:
             library.db.exec(sql"""
@@ -76,7 +76,7 @@ iterator allDocs*(library: SqliteLibrary): Doc =
         var parser = ParseState(input: row[1])
         parser.parse
         if parser.kind == parseOk:
-            yield Doc(key: row[0], children: parser.results)
+            yield Doc(key: row[0].toID, children: parser.results)
 
 method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     let row = library.db.getRow(sql"select id, val from docs where id=?", id)
@@ -86,8 +86,8 @@ method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     parser.parse
     if parser.kind != parseOk:
         raise newException(ValueError, parser.message)
-    return some Doc(key: row[0],
-                           children: parser.results)
+    return some Doc(key: row[0].toID,
+                    children: parser.results)
 
 
 
@@ -106,7 +106,7 @@ method contains*(library: SqliteLibrary, key: ID): bool =
 
 method searchFor*(library: SqliteLibrary, kind: ID): seq[Doc] =
     for row in library.db.rows(sql"select parent_id from subexpr_cache where child_id = ?", kind):
-        if Some(@doc) ?= library.lookup(row[0]):
+        if Some(@doc) ?= library.lookup(row[0].toID):
             result.add doc
 
 #method getFullVocabulary*(library: SqliteLibrary): Vocabulary =

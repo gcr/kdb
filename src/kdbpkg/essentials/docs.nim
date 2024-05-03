@@ -5,11 +5,14 @@ import tables
 import sets
 import fusion/matching
 import hashes
+import json # for stringification
+import strutils
 {.experimental: "caseStmtMacros".}
 
 type
-    ID* = string
+    ID* = distinct string
         ## IDs uniquely identify Docs stored in the database.
+        ## IDs MUST start with :
     Doc* = object
         ## Docs are the entry point to your database. Each Doc
         ## is analogous to a single record or database "row".
@@ -26,24 +29,24 @@ type
         ##
         ## For example, suppose we have a library with the following
         ## five Docs that record a user's vacation:
-        ##   "abcd" -> (title "Trip to Barcelona")
-        ##             (Journal (Date "2024-01-01"
-        ##                        (Text "The plane was late ..."))
-        ##                      (Date "2024-01-05"
-        ##                        (Visited "Park Güell")
-        ##                        (Text "I can't believe...")))
-        ##   "efgh" -> (title "Journal") (vocabFor "top")
-        ##   "ijkl" -> (title "Date") (vocabFor "efgh")
-        ##   "mnop" -> (title "Text") (vocabFor "ijkl") (vocabFor "top")
-        ##   "qrst" -> (title "Visited") (vocabFor "ijkl")
+        ##   ":abcd" -> (title "Trip to Barcelona")
+        ##              (Journal (Date "2024-01-01"
+        ##                         (Text "The plane was late ..."))
+        ##                       (Date "2024-01-05"
+        ##                         (Visited "Park Güell")
+        ##                         (Text "I can't believe...")))
+        ##   ":efgh" -> (title "Journal") (vocabFor ":top")
+        ##   ":ijkl" -> (title "Date") (vocabFor ":efgh")
+        ##   ":mnop" -> (title "Text") (vocabFor ":ijkl") (vocabFor ":top")
+        ##   ":qrst" -> (title "Visited") (vocabFor ":ijkl")
         ##
         ## All five Docs live in the database and can be
-        ## edited in the same way. The "abcd" node contains the
-        ## bulk of the data content, while the "efgh", "ijkl",
-        ## "mnop", and "qrst" nodes define the vocab that "abcd"
+        ## edited in the same way. The ":abcd" node contains the
+        ## bulk of the data content, while the ":efgh", ":ijkl",
+        ## ":mnop", and ":qrst" nodes define the vocab that "abcd"
         ## confirms to. Each of these vocab Docs
-        ## has an "vocab" Expr pointing to either the ID of
-        ## some parent vocab Doc, or "top" to denote that the
+        ## has an "vocabFor" Expr pointing to either the ID of
+        ## some parent vocab Doc, or ":top" to denote that the
         ## Expr should appear at the top level of the Doc.
         ##
         ## There's no separation between data and vocab docs.
@@ -54,8 +57,8 @@ type
         ## too, addressable thanks to some bootstrapping magic and
         ## hard-coded IDs!
         ##
-        ##    "litom-mahut" -> (Title "vocabFor") (vocabFor "top")
-        ##    "hakot-teret" -> (Title "Title") (vocabFor "top")
+        ##    ":litom-mahut" -> (Title "vocabFor") (vocabFor "top")
+        ##    ":hakot-teret" -> (Title "Title") (vocabFor "top")
         ##
 
         key*: ID
@@ -74,6 +77,18 @@ type
     MapLibrary* = ref object of Library
       docs: Table[ID, Doc]
 
+
+proc hash*(id: ID): Hash {.borrow.}
+proc `==`*(a, b: ID): bool {.borrow.}
+proc `$`*(a: ID): string {.borrow.}
+proc len*(a: ID): int {.borrow.}
+proc toID*(str: string): ID =
+  if unlikely(str.len <= 1):
+    raise newException(ValueError, "IDs cannot be blank")
+  if unlikely(str[0] != ':'):
+    raise newException(ValueError, "ID must start with :. Given " & str)
+  return ID(str)
+
 converter toExpr*(doc: Doc): Expr =
   ## Anywhere an Expr is needed, a Doc can be used.
   Expr(kind: doc.key, children: doc.children)
@@ -84,6 +99,17 @@ iterator items*(doc: Doc): Expr =
 iterator items*(doc: Expr): Expr =
   for expr in doc.children:
     yield expr
+
+proc `$`*(exp: Expr): string =
+  var res: seq[string]
+  proc rec(e: Expr, res: var seq[string]) =
+    res.add "(" & $e.kind
+    if e.val.len > 0:
+      res.add($ %*e.val)
+    for c in e: rec(c, res)
+    res.add ")"
+  rec(exp, res)
+  return res.join " "
 
 # Nicer unwrapping of Optional types
 template liftOptional(name, typeA, typeB: untyped): untyped =
@@ -157,34 +183,34 @@ proc macroBodyToExpr(body: NimNode): NimNode {.compileTime.} =
     else:
         raise newException(Defect, "Invalid syntax for ref definition: " & body.treeRepr)
 # the real nice macros
-macro newDoc*(id: string): untyped =
+macro newDoc*(id: ID): untyped =
     result = nnkCall.newTree(bindsym"makeDoc", id)
-macro newDoc*(id: string, body: untyped): untyped =
+macro newDoc*(id: ID, body: untyped): untyped =
     result = nnkCall.newTree(bindsym"makeDoc", id)
     for child in body:
         result.add macroBodyToExpr(child)
-macro defBuiltinDoc*(id: string): untyped =
+macro defBuiltinDoc*(id: ID): untyped =
   quote do:
     builtins.add newDoc(`id`)
-macro defBuiltinDoc*(id: string, body: untyped): untyped =
+macro defBuiltinDoc*(id: ID, body: untyped): untyped =
   quote do:
     builtins.add newDoc(`id`, `body`)
 
 # Time to bootstrap our builtins.
 # These first nodes specify IDs manually.
 let
-    idVocab = "litom-mahut"
-    idTitle = "hakot-teret"
-    topDoc* = defBuiltinDoc "top":
+    idVocab = ":litom-mahut".toId
+    idTitle = ":hakot-teret".toId
+    topDoc* = defBuiltinDoc ":top".toId:
         idTitle "Top scope"
     vocabFor* = defBuiltinDoc idVocab:
-        idVocab "top"
+        idVocab ":top"
         idTitle "vocab-for"
     title* = defBuiltinDoc idTitle:
-        vocabFor "top"
+        vocabFor ":top"
         idTitle "title"
-    vocabHas* = defBuiltinDoc "binar-fotar":
-        vocabFor "top"
+    vocabHas* = defBuiltinDoc ":binar-fotar".toId:
+        vocabFor ":top"
         title "vocab-has"
         title "vocab-child"
 

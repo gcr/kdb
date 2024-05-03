@@ -27,7 +27,7 @@ suite "Bulit-in refs":
     check titles == @[some "vocab-for", some "title"]
 
   test "Multiple children":
-    let x = newDoc "multichild":
+    let x = newDoc ":multichild".toID:
       title "one"
       title "two"
     check x.firstTitle == some "one"
@@ -40,10 +40,10 @@ suite "Bulit-in refs":
 
   test "Deeply nested refs":
     let
-      head = newDoc "head": vocabFor "top"
-      author = newDoc "auth": vocabFor "head"
-      date = newDoc "date": vocabFor "head"
-      someDoc = newDoc "someDoc":
+      head = newDoc ":head".toID: vocabFor ":top"
+      author = newDoc ":auth".toID: vocabFor ":head"
+      date = newDoc ":date".toID: vocabFor ":head"
+      someDoc = newDoc ":someDoc".toID:
           head:
             author "Kimmmy"
             date "2024"
@@ -64,7 +64,7 @@ suite "Bulit-in refs":
     check builtins.contains title.key
 
   test "Making ephemeral refs doesn't touch builtins":
-    let x = newDoc "abc": title "something"
+    let x = newDoc toID":abc": title "something"
     check:
       @["something"] == x.allTitles.toSeq
       not title.has(x)
@@ -158,145 +158,145 @@ suite "Dexpr parsing":
 suite "Ref resolution":
   setup:
     var univ = newMapLibrary()
-    univ.add: newDoc "travel":
+    univ.add: newDoc toID":travel":
       title "Travel"
-      vocabFor "top"
-    univ.add: newDoc "dd":
+      vocabFor ":top"
+    univ.add: newDoc toID":dd":
       title "Doc"
-      vocabFor "top"
-    univ.add: newDoc "uuidHead":
+      vocabFor ":top"
+    univ.add: newDoc toID":uuidHead":
       title "Head"
-      vocabFor "dd"
-      vocabHas "category"
-      vocabHas "someDup2"
-      vocabHas "undefined-lololol"
-    univ.add: newDoc "uuidDate":
+      vocabFor ":dd"
+      vocabHas ":category"
+      vocabHas ":someDup2"
+      vocabHas ":undefined-lololol"
+    univ.add: newDoc toID":uuidDate":
       title "Date"
-      vocabFor "uuidHead"
-    univ.add: newDoc "titleButInsideHead":
+      vocabFor ":uuidHead"
+    univ.add: newDoc toID":titleButInsideHead":
       title "Title"
-      vocabFor "uuidHead"
-    univ.add: newDoc "someDup1":
+      vocabFor ":uuidHead"
+    univ.add: newDoc toID":someDup1":
       title "DuplicateName"
-      vocabFor "uuidHead"
-    univ.add: newDoc "someDup2":
+      vocabFor ":uuidHead"
+    univ.add: newDoc toID":someDup2":
       title "DuplicateName"
       title "UnambiguousName"
-    univ.add: newDoc "someDup3":
+    univ.add: newDoc toID":someDup3":
       title "NameMatchMethodTest"
-      vocabFor "uuidHead"
-    univ.add: newDoc "someDup4":
+      vocabFor ":uuidHead"
+    univ.add: newDoc toID":someDup4":
       title "name_match_method_test"
-      vocabFor "uuidHead"
-    univ.add: newDoc "category":
+      vocabFor ":uuidHead"
+    univ.add: newDoc toID":category":
       title "category"
       title "A descendant of head"
 
   test "Unpolluted builtins":
-    check "dd" in univ
-    check "dd" notin builtins
-    check "category" in univ
+    check toID":dd" in univ
+    check toID":dd" notin builtins
+    check toID":category" in univ
 
   test "ID parsing":
-    check "foo".toTitleId == TitleId(title: "foo", id: "")
-    check "foo:".toTitleId == TitleId(title: "foo", id: "")
-    check ":abcd".toTitleId == TitleId(title: "", id: "abcd")
-    check "a:b".toTitleId == TitleId(title: "a", id: "b")
-    check ":".toTitleId == TitleId(title: "", id: "")
+    check "foo".toTitleId == TitleId(title: "foo", id: ID(""))
+    check "foo:".toTitleId == TitleId(title: "foo", id: ID(""))
+    check ":abcd".toTitleId == TitleId(title: "", id: toID":abcd")
+    check "a:b".toTitleId == TitleId(title: "a", id: toID":b")
+    check ":".toTitleId == TitleId(title: "", id: ID(""))
 
   test "Direct resolution":
     let vocab = univ.getFullVocabulary()
     check:
-      vocab.resolveDirectly("Doc", context="top").isSome
-      vocab.resolveDirectly("NoMatch", context="top").isNone
-      vocab.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
-      vocab.resolveDirectly("Title", context="top").key == some title.key
-      vocab.resolveDirectly("Date", context="top").key == none(ID)
-      vocab.resolveDirectly("Date", context="uuidHead").key == some "uuidDate"
-      vocab.resolveDirectly("DuplicateName", context="uuidHead").isNone
-      vocab.resolveDirectly(":someDup2", context="uuidHead").key == some "someDup2"
-      vocab.resolveDirectly("NONMATCHING:someDup2", context="uuidHead").isNone
-      vocab.resolveDirectly("DuplicateName:someDup1", context="uuidHead").key == some "someDup1"
-      vocab.resolveDirectly("$:omeDup2", context="top").isNone
-      vocab.resolveDirectly("UnambiguousName", context="uuidHead").key == some "someDup2"
-      vocab.resolveDirectly("unambiguous-name", context="uuidHead").key == some "someDup2"
-      vocab.resolveDirectly("UNAMBIGUOUS_NAME", context="uuidHead").key == some "someDup2"
-      vocab.resolveDirectly("category", context="uuidHead").key == some "category"
+      vocab.resolveDirectly("Doc", context=toID":top").isSome
+      vocab.resolveDirectly("NoMatch", context=toID":top").isNone
+      vocab.resolveDirectly("Title", context=toID":uuidHead").key == some toID":titleButInsideHead"
+      vocab.resolveDirectly("Title", context=toID":top").key == some title.key
+      vocab.resolveDirectly("Date", context=toID":top").key == none(ID)
+      vocab.resolveDirectly("Date", context=toID":uuidHead").key == some toID":uuidDate"
+      vocab.resolveDirectly("DuplicateName", context=toID":uuidHead").isNone
+      vocab.resolveDirectly(":someDup2", context=toID":uuidHead").key == some toID":someDup2"
+      vocab.resolveDirectly("NONMATCHING:someDup2", context=toID":uuidHead").isNone
+      vocab.resolveDirectly("DuplicateName:someDup1", context=toID":uuidHead").key == some toID":someDup1"
+      vocab.resolveDirectly("$:omeDup2", context=toID":top").isNone
+      vocab.resolveDirectly("UnambiguousName", context=toID":uuidHead").key == some toID":someDup2"
+      vocab.resolveDirectly("unambiguous-name", context=toID":uuidHead").key == some toID":someDup2"
+      vocab.resolveDirectly("UNAMBIGUOUS_NAME", context=toID":uuidHead").key == some toID":someDup2"
+      vocab.resolveDirectly("category", context=toID":uuidHead").key == some toID":category"
 
   test "Resolution order should matter":
     let vocab = univ.getFullVocabulary()
     check:
-      vocab.resolveDirectly("name-matchMethod_test", context="uuidHead").isNone
-      vocab.resolveDirectly("name_match_method_test", context="uuidHead").key == some "someDup4"
-      vocab.resolveDirectly("NameMatchMethodTest", context="uuidHead").key == some "someDup3"
-      vocab.resolveDirectly("nameMatchMethodTest", context="uuidHead").isNone
+      vocab.resolveDirectly("name-matchMethod_test", context=toID":uuidHead").isNone
+      vocab.resolveDirectly("name_match_method_test", context=toID":uuidHead").key == some toID":someDup4"
+      vocab.resolveDirectly("NameMatchMethodTest", context=toID":uuidHead").key == some toID":someDup3"
+      vocab.resolveDirectly("nameMatchMethodTest", context=toID":uuidHead").isNone
   test "Indirect resolution":
-    univ.add: newDoc "recDup":
+    univ.add: newDoc toID":recDup":
       title "RecursiveDuplicate"
-      vocabFor "travel"
-      vocabFor "dd"
-      vocabFor "uuidHead"
-      vocabFor "recDup"
+      vocabFor ":travel"
+      vocabFor ":dd"
+      vocabFor ":uuidHead"
+      vocabFor ":recDup"
     let vocab = univ.getFullVocabulary()
-    proc resolveIndirectly(title: string, context: ID): Option[seq[string]] =
+    proc resolveIndirectly(title: string, context: ID): Option[seq[ID]] =
       if Some(@path) ?= vocab.resolveIndirectly(title, context):
         return some path.mapIt(it.key)
     check:
-      resolveIndirectly("name-matchMethod_test", context="top").isNone
-      resolveIndirectly("name-matchMethod_test", context="dd").isNone
-      resolveIndirectly("unambiguousName", context="top") == some @["dd", "uuidHead", "someDup2"]
-      resolveIndirectly("unambiguous-name", context="top") == some @["dd", "uuidHead", "someDup2"]
-      resolveIndirectly("unambiguousName", context="dd") == some @["uuidHead", "someDup2"]
-      resolveIndirectly("unambiguousName", context="travel").isNone
+      resolveIndirectly("name-matchMethod_test", context=toID":top").isNone
+      resolveIndirectly("name-matchMethod_test", context=toID":dd").isNone
+      resolveIndirectly("unambiguousName", context=toID":top") == some @[toID":dd", toID":uuidHead", toID":someDup2"]
+      resolveIndirectly("unambiguous-name", context=toID":top") == some @[toID":dd", toID":uuidHead", toID":someDup2"]
+      resolveIndirectly("unambiguousName", context=toID":dd") == some @[toID":uuidHead", toID":someDup2"]
+      resolveIndirectly("unambiguousName", context=toID":travel").isNone
 
       # only one node appearing in many contexts
-      vocab.resolveDirectly("RecursiveDuplicate", context="top").isNone
-      resolveIndirectly("RecursiveDuplicate", context="top").isNone
-      vocab.resolveDirectly("RecursiveDuplicate", context="dd").key == some "recDup"
-      resolveIndirectly("RecursiveDuplicate", context="dd").isNone
-      vocab.resolveDirectly("RecursiveDuplicate", context="travel").key == some "recDup"
-      resolveIndirectly("RecursiveDuplicate", context="travel").isNone
-      resolveIndirectly("RecursiveDuplicate", context="uuidHead").isNone
-      vocab.resolveDirectly("RecursiveDuplicate", context="uuidHead").key == some "recDup"
-      resolveIndirectly("RecursiveDuplicate", context="recDup").isNone
-      vocab.resolveDirectly("RecursiveDuplicate", context="recDup").key == some "recDup"
+      vocab.resolveDirectly("RecursiveDuplicate", context=toID":top").isNone
+      resolveIndirectly("RecursiveDuplicate", context=toID":top").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context=toID":dd").key == some toID":recDup"
+      resolveIndirectly("RecursiveDuplicate", context=toID":dd").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context=toID":travel").key == some toID":recDup"
+      resolveIndirectly("RecursiveDuplicate", context=toID":travel").isNone
+      resolveIndirectly("RecursiveDuplicate", context=toID":uuidHead").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context=toID":uuidHead").key == some toID":recDup"
+      resolveIndirectly("RecursiveDuplicate", context=toID":recDup").isNone
+      vocab.resolveDirectly("RecursiveDuplicate", context=toID":recDup").key == some toID":recDup"
 
       # vocabHas and vocabFor
-      resolveIndirectly("category", context="top") == some @["dd", "uuidHead", "category"]
+      resolveIndirectly("category", context=toID":top") == some @[toID":dd", toID":uuidHead", toID":category"]
 
   test "Recursive top resolution":
-    univ.add: newDoc "meh-meh":
-      vocabHas "top"
-      vocabFor "uuidHead"
+    univ.add: newDoc toID":meh-meh":
+      vocabHas ":top"
+      vocabFor ":uuidHead"
       title "recurse"
     let vocab = univ.getFullVocabulary()
     check:
-      vocab.resolveDirectly("Doc", context="top").isSome
-      vocab.resolveDirectly("NoMatch", context="top").isNone
-      vocab.resolveDirectly("Title", context="uuidHead").key == some "titleButInsideHead"
-      vocab.resolveDirectly("Title", context="top").key == some title.key
-      vocab.resolveDirectly("recurse", context="uuidHead").key == some "meh-meh"
+      vocab.resolveDirectly("Doc", context=toID":top").isSome
+      vocab.resolveDirectly("NoMatch", context=toID":top").isNone
+      vocab.resolveDirectly("Title", context=toID":uuidHead").key == some toID":titleButInsideHead"
+      vocab.resolveDirectly("Title", context=toID":top").key == some title.key
+      vocab.resolveDirectly("recurse", context=toID":uuidHead").key == some toID":meh-meh"
       # this is the kicker: don't structuralize past Top
       # otherwise this might resolve to
       # head->recurse->top->doc->head->recurse...
-      vocab.resolveIndirectly("Doc", context="uuidHead").isNone
+      vocab.resolveIndirectly("Doc", context=toID":uuidHead").isNone
 
 suite "Structuralization":
   setup:
     var univ = newMapLibrary()
-    univ.add: newDoc "doc": title "doc"; vocabFor "top"
-    univ.add: newDoc "head": title "head"; vocabFor "doc"
-    univ.add: newDoc "author": title "author"; vocabFor "head"
-    univ.add: newDoc "date": title "date"; vocabFor "head"
-    univ.add: newDoc "body": title "body"; vocabFor "doc"
-    univ.add: newDoc "h1": title "h1"; vocabFor "body"
-    univ.add: newDoc "span": title "span"; vocabFor "h1"; vocabFor "body"
-    univ.add: newDoc "dup1": title "dup"; vocabFor "body"; vocabFor "body"
-    univ.add: newDoc "dup2": title "dup"; title "dup2"; vocabFor "body"; vocabFor "body"
+    univ.add: newDoc toID":doc": title "doc"; vocabFor ":top"
+    univ.add: newDoc toID":head": title "head"; vocabFor ":doc"
+    univ.add: newDoc toID":author": title "author"; vocabFor ":head"
+    univ.add: newDoc toID":date": title "date"; vocabFor ":head"
+    univ.add: newDoc toID":body": title "body"; vocabFor ":doc"
+    univ.add: newDoc toID":h1": title "h1"; vocabFor ":body"
+    univ.add: newDoc toID":span": title "span"; vocabFor ":h1"; vocabFor ":body"
+    univ.add: newDoc toID":dup1": title "dup"; vocabFor ":body"; vocabFor ":body"
+    univ.add: newDoc toID":dup2": title "dup"; title "dup2"; vocabFor ":body"; vocabFor ":body"
     proc structure(str: string): string =
       var parser = ParseState(input: str, vocab: univ.getFullVocabulary())
       parser.processTokenStream()
-      parser.structuralize("top")
+      parser.structuralize(toID":top")
       case parser:
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
@@ -345,11 +345,11 @@ suite "Structuralization":
         "pushi(:body) pushi(:span) popi pushi(:h1) str(Foo) "&
         "popi popi popi"
       structure("doc (author \"Kimmy\" h1 \"Foo\")")==
-        "20: Couldn't unambiguously resolve symbol h1 inside author"
+        "20: Couldn't unambiguously resolve symbol h1 inside :author"
       structure("doc author \"Kimmy\" h1 \"Foo\")")==
         "27: Unbalanced parentheses: ')' without a '('"
       structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
-        "28: h1 isn't a field of author"
+        "28: h1 isn't a field of :author"
       structure("title \"Foo\" title \"Bar\"")==
         "pushi(:hakot-teret) str(Foo) popi pushi(:hakot-teret) str(Bar) popi"
       structure("title \"Foo\" author title \"Bar\"")==
@@ -357,7 +357,7 @@ suite "Structuralization":
       structure("author author author ")==
         "pushi(:doc) pushi(:head) pushi(:author) popi pushi(:author) popi pushi(:author) popi popi popi"
       structure("author (author (author)) ")==
-        "8: author isn't a field of author"
+        "8: author isn't a field of :author"
       structure("head author \"Foo\" head author \"Bar\" author \"Baz\" head head")==
         "pushi(:doc) pushi(:head) pushi(:author) str(Foo) popi popi pushi(:head) pushi(:author) str(Bar) popi pushi(:author) str(Baz) popi popi pushi(:head) popi pushi(:head) popi popi"
 
@@ -388,8 +388,8 @@ suite "Sqlite library":
     check lib.contains(title.key)
     check lib.contains(vocabFor.key)
 
-    lib.add: newDoc ":something": title "Foooo"
-    let newDoc = lib.lookup ":something"
+    lib.add: newDoc toID":something": title "Foooo"
+    let newDoc = lib.lookup toID":something"
     check newDoc.isSome
-    check newDoc.key == some ":something"
+    check newDoc.key == some toID":something"
     check newDoc.get().allTitles.toSeq == @["Foooo"]
