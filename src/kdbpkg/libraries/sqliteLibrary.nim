@@ -92,12 +92,26 @@ method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
 
 
 method add*(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discardable.} =
+    library.db.exec(sql"begin")
     result = library.addWithoutVersion(docs)
+    var needsVocabRegen = false
     for doc in docs:
         library.db.exec(sql"""
         insert into versions(id,val,timestamp)
           select id, val, lastModified from Docs where id=?
         """, doc.key)
+        if doc.wouldCauseVocabRegen:
+            needsVocabRegen = true
+    if needsVocabRegen:
+        try:
+            let vocab = library.getFullVocabulary()
+        except ValueError:
+            library.db.exec sql"rollback"
+            raise newException(ValueError, "Adding this doc would break vocab generation")
+    library.db.exec sql"commit"
+
+
+
 
 method contains*(library: SqliteLibrary, key: ID): bool =
     let row = library.db.getRow(sql"select id, val from docs where id=?", key)

@@ -1,5 +1,6 @@
 import random
 import strformat
+import docs
 randomize()
 
 ## Implementation of proquints.
@@ -14,8 +15,8 @@ proc vow():string = $vowels[rand(max=vowels.high.int)]
 
 proc proquint(): string =
     fmt"{con()}{vow()}{con()}{vow()}{con()}"
-proc uuid*(): string =
-    fmt"{proquint()}-{proquint()}"
+proc uuid*(): ID =
+    toID(fmt":{proquint()}-{proquint()}")
 
 when isMainModule:
     echo uuid()

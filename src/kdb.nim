@@ -1,27 +1,52 @@
 import kdbpkg/essentials/[docs, parsing, vocabulary, uuid, repr]
 import kdbpkg/libraries/sqliteLibrary
-import std/[strutils, sequtils, options, streams, times, strformat]
+import std/[strutils, sequtils, options, streams, times, strformat, terminal]
 import fusion/matching
 
-proc makeDoc(lib: Library, vocab: Vocabulary, exprs: seq[string]): Option[Doc] =
-  var doc = makeDoc(uuid())
-  var parser = parsing.ParseState(
-    input: exprs.join(" "), vocab: vocab)
+proc readExpr(lib: Library, vocab: Vocabulary, exprs: seq[string]): seq[Expr] =
+  var parser = ParseState(input: exprs.join(" "), vocab: vocab)
   parser.parse()
   if parser.kind == parseOk:
-    doc.children = parser.results
-    return some doc
+    return parser.results
   else:
-    echo exprs.join(" ")
-    stderr.write("Couldn't parse\n")
-    stderr.write(parser.message)
+    stderr.styledWriteLine styleBright, fgRed, "[error]", fgDefault, " Parse error:"
+    stderr.resetAttributes
+    # Which token to highlight?
+    var failingLoc = parser.loc
+    var failingLaterLoc = 0
+    for p in parser.tokens:
+      if p.loc > failingLoc:
+        failingLaterLoc = p.loc
+        break
+    # found it
+    for line in exprs.join(" ").splitLines():
+      if failingLoc > line.len:
+        stderr.styledWriteLine "   " & line
+      else:
+        if failingLaterLoc <= 0:
+          # not sure where to highlight
+          var before = line.substr(0, failingLoc)
+          var failing = line.substr(failingLoc-1)
+          stderr.styledWriteLine "   " & before, fgRed, failing
+        else:
+          var before = line.substr(0, failingLoc-1)
+          var failing = line.substr(failingLoc, failingLaterLoc-1)
+          var after = line.substr(failingLaterLoc)
+          stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
+        stderr.styledWriteLine fgRed, "   " & repeat("~", failingLoc), "^"
+        stderr.resetAttributes
+        break
+      failingLoc -= (line.len + 1) # for the newline
+      failingLaterLoc -= (line.len + 1)
+    stderr.styledWriteLine styleBright, fgRed, "[error] ", fgDefault, parser.message
     quit 1
 
 proc p(exprs: seq[string]) =
   var lib = openSqliteLibrary()
-  if Some(@doc) ?= makeDoc(lib, lib.getFullVocabulary(), exprs):
-    echo doc.reprFull
-    echo lib.reprHumanFriendly(lib.getFullVocabulary(), doc)
+  var vocab = lib.getFullVocabulary()
+  var newExprs = readExpr(lib, lib.getFullVocabulary(), exprs)
+  for expr in newExprs:
+    stdout.styledWriteLine lib.reprHumanFriendly(vocab, expr)
 
 proc fromStdin() =
   var lib = openSqliteLibrary()
@@ -29,15 +54,16 @@ proc fromStdin() =
   var strm = newFileStream "/tmp/foo.exprs"
   while true:
     let line = strm.readLine()
-    if Some(@doc) ?= makeDoc(lib, vocab, @[line]):
-      discard lib.add doc
+    var doc = makeDoc(uuid())
+    doc.children = readExpr(lib, lib.getFullVocabulary(), @[line])
+    discard lib.add doc
 
 proc bench() =
   var lib = openSqliteLibrary()
   echo fmt"Iterating through all keys..."
   let begin = getTime()
   var count = 0
-  var vocab = lib.getFullVocabulary()
+  #var vocab = lib.getFullVocabulary()
   for doc in lib.allDocs:
     #count += reprHumanFriendly(lib, vocab, doc, "top").len
     #count += doc.reprFull.len
@@ -47,11 +73,13 @@ proc bench() =
 
 proc n(exprs: seq[string]) =
   var lib = openSqliteLibrary()
-  if Some(@doc) ?= makeDoc(lib, lib.getFullVocabulary(), exprs):
-    echo doc.reprFull
-    echo lib.reprHumanFriendly(lib.getFullVocabulary(), doc)
-    lib.add(doc)
-    echo "Added."
+  var doc = makeDoc(uuid())
+  doc.children = readExpr(lib, lib.getFullVocabulary(), exprs)
+  stdout.styledWrite fgWhite, $doc.key, " -> ", fgDefault, "\n"
+  for e in doc.children:
+    stdout.styledWriteLine lib.reprHumanFriendly(lib.getFullVocabulary(), e)
+  lib.add(doc)
+  stderr.styledWrite "Added."
 
 when isMainModule:
   var lib = openSqliteLibrary()

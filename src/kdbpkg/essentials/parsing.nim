@@ -110,7 +110,7 @@ let tokenPegParser = peg("toplevel", ps: TokenParseState):
 
   # String literals!
   strbegin <- >'"':
-    ps.s.add DexprToken(kind: dtkStrLit)
+    ps.s.add DexprToken(kind: dtkStrLit, loc: @1)
   unicodeEscape  <- 'u' * >Xdigit[4]:
     let rune = fromHex[int32]($1)
     ps.s[^1].value.add $Rune(rune)
@@ -155,7 +155,7 @@ proc processTokenStream*(p: var ParseState) =
   p.tokens = tps.s
   if not matches.ok:
     p.kind = parseFail
-    p.loc = matches.matchMax
+    p.loc = matches.matchMax-1
     p.message = "Failed to parse"
 
 # A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate vocab backtracking.
@@ -196,7 +196,11 @@ proc structuralize*(ps: var ParseState, context=":top".toID) =
         resolved.addLast tok.withSym $path[^1].key
         contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
-        fail "{tok.symbol} isn't a field of {contexts[^1].key}"
+        # Backtrack
+        # yes, this is necessary for explicit context pushes too! :-)
+        unresolvedStream.addFirst tok
+        unresolvedStream.addFirst DexprToken(kind:dtkPopContextImplicitly, loc: tok.loc)
+        #fail "{tok.symbol} isn't a field of {contexts[^1].key}"
     of dtkPopContext:
       # Explicitly ascend from the structure. Only emitted
       # with an explicit ')', so this should jump out of all

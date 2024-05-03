@@ -20,7 +20,6 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
                 result &= $expr.kind
             else:
                 result &= $expr.kind
-
     else:
         result &= $expr.kind
     if expr.val != "":
@@ -29,12 +28,4 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
     if expr.children.len > 0:
         result &= " "
         result &= expr.children.mapIt(reprHumanFriendly(univ, vocab, it, expr.kind)).join(" ")
-    result &= ")"
-
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, doc: Doc, context = "top"): string =
-    result = "("
-    result &= $doc.key
-    if doc.children.len > 0:
-        result &= " "
-        result &= doc.children.mapIt(univ.reprHumanFriendly(vocab, it)).join(" ")
     result &= ")"

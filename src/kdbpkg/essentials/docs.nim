@@ -249,3 +249,7 @@ method searchFor*(library: MapLibrary, kind: ID): seq[Doc] =
     for expr in doc / kind:
       result.add doc
       break
+
+
+proc wouldCauseVocabRegen*(d: Doc): bool =
+  return d.has(vocabFor) or d.has(vocabHas)

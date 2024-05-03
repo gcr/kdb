@@ -349,15 +349,17 @@ suite "Structuralization":
       structure("doc author \"Kimmy\" h1 \"Foo\")")==
         "27: Unbalanced parentheses: ')' without a '('"
       structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
-        "28: h1 isn't a field of :author"
+        "28: Couldn't unambiguously resolve symbol h1 inside :author"
       structure("title \"Foo\" title \"Bar\"")==
         "pushi(:hakot-teret) str(Foo) popi pushi(:hakot-teret) str(Bar) popi"
+      structure("title \"Foo\" (title \"Bar\")")==
+        "pushi(:hakot-teret) str(Foo) popi push(:hakot-teret) str(Bar) pop"
       structure("title \"Foo\" author title \"Bar\"")==
         "pushi(:hakot-teret) str(Foo) popi pushi(:doc) pushi(:head) pushi(:author) popi popi popi pushi(:hakot-teret) str(Bar) popi"
       structure("author author author ")==
         "pushi(:doc) pushi(:head) pushi(:author) popi pushi(:author) popi pushi(:author) popi popi popi"
       structure("author (author (author)) ")==
-        "8: author isn't a field of :author"
+        "16: Couldn't unambiguously resolve symbol author inside :author"
       structure("head author \"Foo\" head author \"Bar\" author \"Baz\" head head")==
         "pushi(:doc) pushi(:head) pushi(:author) str(Foo) popi popi pushi(:head) pushi(:author) str(Bar) popi pushi(:author) str(Baz) popi popi pushi(:head) popi pushi(:head) popi popi"
 
@@ -369,6 +371,10 @@ suite "Structuralization":
        "(doc (body (span \"Foo\") (span \"Bar\")))"
       parseAnnot(":dup1 \"test\"")==
        "(doc (body (dup:dup1 \"test\")))"
+    univ.add: newDoc toID":a": title "Space Here"; vocabFor ":top"
+    check:
+      parseAnnot(":a \"test\"")==
+       "(:a \"test\")"
 
   test "Multiple Exprs":
     check:
@@ -393,3 +399,8 @@ suite "Sqlite library":
     check newDoc.isSome
     check newDoc.key == some toID":something"
     check newDoc.get().allTitles.toSeq == @["Foooo"]
+
+  test "Should never add broken vocab":
+    expect ValueError:
+      lib.add: newDoc toID":broken": title "Broken"; vocabFor "nope"
+    check lib.lookup(toID":broken").isNone
