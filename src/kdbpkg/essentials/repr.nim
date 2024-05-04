@@ -7,7 +7,8 @@ import sequtils
 import fusion/matching
 import json
 
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ":top".toID): string =
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr,
+        context = ":top".toID): string =
     result = "("
     if Some(@doc) ?= univ.lookup expr.kind:
         block outer:
@@ -27,5 +28,6 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
         result &= $ %*expr.val
     if expr.children.len > 0:
         result &= " "
-        result &= expr.children.mapIt(reprHumanFriendly(univ, vocab, it, expr.kind)).join(" ")
+        result &= expr.children.mapIt(reprHumanFriendly(univ, vocab, it,
+                expr.kind)).join(" ")
     result &= ")"

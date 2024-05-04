@@ -19,7 +19,8 @@ type
         path: string
         vocabCache: Option[Vocabulary]
 
-proc addWithoutVersion(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discardable.}=
+proc addWithoutVersion(library: SqliteLibrary, docs: varargs[
+        Doc]): Doc {.discardable.} =
     for doc in docs:
         library.db.exec(sql"""
         insert into Docs(id, val, lastModified) values(?, ?, unixepoch('subsec'))
@@ -35,7 +36,7 @@ proc addWithoutVersion(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discar
 proc openSqliteLibrary*(maybePath = ""): SqliteLibrary =
     let actualPath = getLibraryPath(maybePath).string
     result = SqliteLibrary(path: actualPath)
-    result.db = open(actualPath, "","","")
+    result.db = open(actualPath, "", "", "")
     result.db.exec sql"pragma busy_timeout=1000"
     result.db.exec sql"pragma synchronous=NORMAL"
     result.db.exec sql"pragma journal_mode=TRUNCATE"

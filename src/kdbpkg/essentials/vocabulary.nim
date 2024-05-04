@@ -34,12 +34,12 @@ method getFullVocabulary*(library: Library): Vocabulary {.base.} =
   template addVocab(k: ID, d: Doc): untyped =
     ### Indicate that d directly follows k
     if k notin result:
-       result[k]=HashSet[Doc]()
+      result[k] = HashSet[Doc]()
     if d.key notin result:
-      result[d.key]=HashSet[Doc]()
+      result[d.key] = HashSet[Doc]()
     result[k].incl d
   var docCache: Table[ID, Doc]
-  proc lookupDoc(key: ID): Option[Doc]=
+  proc lookupDoc(key: ID): Option[Doc] =
     if key notin docCache:
       if Some(@doc) ?= library.lookup key:
         docCache[key] = doc

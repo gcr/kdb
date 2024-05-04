@@ -73,9 +73,9 @@ type
         children*: seq[Expr]
 
     Library* = ref object of RootObj
-      ## Librarys are key/value stores of Docs.
+        ## Librarys are key/value stores of Docs.
     MapLibrary* = ref object of Library
-      docs: Table[ID, Doc]
+        docs: Table[ID, Doc]
 
 
 proc hash*(id: ID): Hash {.borrow.}
@@ -83,78 +83,78 @@ proc `==`*(a, b: ID): bool {.borrow.}
 proc `$`*(a: ID): string {.borrow.}
 proc len*(a: ID): int {.borrow.}
 proc toID*(str: string): ID =
-  if unlikely(str.len <= 1):
-    raise newException(ValueError, "IDs cannot be blank")
-  if unlikely(str[0] != ':'):
-    raise newException(ValueError, "ID must start with :. Given " & str)
-  return ID(str)
+    if unlikely(str.len <= 1):
+        raise newException(ValueError, "IDs cannot be blank")
+    if unlikely(str[0] != ':'):
+        raise newException(ValueError, "ID must start with :. Given " & str)
+    return ID(str)
 
 converter toExpr*(doc: Doc): Expr =
-  ## Anywhere an Expr is needed, a Doc can be used.
-  Expr(kind: doc.key, children: doc.children)
+    ## Anywhere an Expr is needed, a Doc can be used.
+    Expr(kind: doc.key, children: doc.children)
 
 iterator items*(doc: Doc): Expr =
-  for expr in doc.children:
-    yield expr
+    for expr in doc.children:
+        yield expr
 iterator items*(doc: Expr): Expr =
-  for expr in doc.children:
-    yield expr
+    for expr in doc.children:
+        yield expr
 
 proc `$`*(exp: Expr): string =
-  var res: seq[string]
-  proc rec(e: Expr, res: var seq[string]) =
-    res.add "(" & $e.kind
-    if e.val.len > 0:
-      res.add($ %*e.val)
-    for c in e: rec(c, res)
-    res.add ")"
-  rec(exp, res)
-  return res.join " "
+    var res: seq[string]
+    proc rec(e: Expr, res: var seq[string]) =
+        res.add "(" & $e.kind
+        if e.val.len > 0:
+            res.add( $ %*e.val)
+        for c in e: rec(c, res)
+        res.add ")"
+    rec(exp, res)
+    return res.join " "
 
 # Nicer unwrapping of Optional types
 template liftOptional(name, typeA, typeB: untyped): untyped =
-  proc `name`*(item: Option[typeA]): Option[typeB] =
-    if item.isSome: return some item.get().name
+    proc `name`*(item: Option[typeA]): Option[typeB] =
+        if item.isSome: return some item.get().name
 liftOptional(key, Doc, ID)
 liftOptional(kind, Expr, ID)
 liftOptional(val, Expr, string)
 
 method lookup*(library: Library, id: ID): Option[Doc] {.base.} = none(Doc)
-  ## Lookup a doc by ID
+    ## Lookup a doc by ID
 method lookup*(library: MapLibrary, id: ID): Option[Doc] =
-  if id in library.docs: return some(library.docs[id])
+    if id in library.docs: return some(library.docs[id])
 proc lookupDocForExpr*(library: Library, expr: Expr): Option[Doc] =
-  ## returns the vocab-defining Doc for a given Expr
-  return library.lookup(expr.kind)
+    ## returns the vocab-defining Doc for a given Expr
+    return library.lookup(expr.kind)
 
 
 
 method add*(library: Library, docs: varargs[Doc]): Doc {.discardable, base.} =
-  ## add an Doc to the library
-  raise newException(ObjectAssignmentDefect, "Cannot add a ref to an abstract base library")
+    ## add an Doc to the library
+    raise newException(ObjectAssignmentDefect, "Cannot add a ref to an abstract base library")
 method add*(library: MapLibrary, docs: varargs[Doc]): Doc {.discardable.} =
-  for exp in docs:
-    library.docs[exp.key] = exp
-  docs[0]
+    for exp in docs:
+        library.docs[exp.key] = exp
+    docs[0]
 method contains*(library: Library, key: ID): bool {.base.} = false
 method contains*(library: MapLibrary, key: ID): bool =
-  key in library.docs
+    key in library.docs
 
 # Built-in library
 var builtins* = MapLibrary()
 proc newMapLibrary*(): MapLibrary =
-  MapLibrary(docs: builtins.docs)
+    MapLibrary(docs: builtins.docs)
 
 iterator allBuiltins*(): Doc =
-  for doc in builtins.docs.values:
-    yield doc
+    for doc in builtins.docs.values:
+        yield doc
 
 proc makeDoc*(id: ID, items: varargs[Expr]): Doc =
-    Doc(key:id, children:items.toSeq)
-proc newExpr*(doc: Doc, val: string="", items: varargs[Expr]= []): Expr =
-    Expr(kind: doc.key, val:val, children:items.toSeq)
-proc newExpr*(key: ID, val: string="", items: varargs[Expr]= []): Expr =
-    Expr(kind: key, val:val, children:items.toSeq)
+    Doc(key: id, children: items.toSeq)
+proc newExpr*(doc: Doc, val: string = "", items: varargs[Expr] = []): Expr =
+    Expr(kind: doc.key, val: val, children: items.toSeq)
+proc newExpr*(key: ID, val: string = "", items: varargs[Expr] = []): Expr =
+    Expr(kind: key, val: val, children: items.toSeq)
 
 # Macro for parsing refs and their bodies
 proc macroBodyToExpr(body: NimNode): NimNode {.compileTime.} =
@@ -190,11 +190,11 @@ macro newDoc*(id: ID, body: untyped): untyped =
     for child in body:
         result.add macroBodyToExpr(child)
 macro defBuiltinDoc*(id: ID): untyped =
-  quote do:
-    builtins.add newDoc(`id`)
+    quote do:
+        builtins.add newDoc(`id`)
 macro defBuiltinDoc*(id: ID, body: untyped): untyped =
-  quote do:
-    builtins.add newDoc(`id`, `body`)
+    quote do:
+        builtins.add newDoc(`id`, `body`)
 
 # Time to bootstrap our builtins.
 # These first nodes specify IDs manually.
@@ -220,36 +220,36 @@ let
 # The converter above allows the converse and not this,
 # which is correct behavior.
 iterator `/`*(a: Expr, b: Doc): Expr =
-  for child in a:
-    if child.kind == b.key:
-      yield child
+    for child in a:
+        if child.kind == b.key:
+            yield child
 iterator `/`*(a: Expr, kind: ID): Expr =
-  for child in a:
-    if child.kind == kind:
-      yield child
+    for child in a:
+        if child.kind == kind:
+            yield child
 proc has*(a: Expr, b: Doc): bool =
-  for expr in a / b: return true
+    for expr in a / b: return true
 proc hasEqual*(a: Expr, b: Doc, pl: string): bool =
-  for expr in a / b:
-    if expr.val == pl:
-      return true
+    for expr in a / b:
+        if expr.val == pl:
+            return true
 proc first*(a: Expr, b: Doc): Option[Expr] =
-  for expr in a / b: return some expr
+    for expr in a / b: return some expr
 
 # Convenience methods
 proc firstTitle*(doc: Doc): Option[string] =
-  return (doc.first title).val
+    return (doc.first title).val
 iterator allTitles*(doc: Doc): string =
-  for expr in doc / title:
-    yield expr.val
+    for expr in doc / title:
+        yield expr.val
 
 method searchFor*(library: Library, kind: ID): seq[Doc] {.base.} = discard
 method searchFor*(library: MapLibrary, kind: ID): seq[Doc] =
-  for doc in library.docs.values:
-    for expr in doc / kind:
-      result.add doc
-      break
+    for doc in library.docs.values:
+        for expr in doc / kind:
+            result.add doc
+            break
 
 
 proc wouldCauseVocabRegen*(d: Doc): bool =
-  return d.has(vocabFor) or d.has(vocabHas)
+    return d.has(vocabFor) or d.has(vocabHas)
