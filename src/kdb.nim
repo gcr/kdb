@@ -25,8 +25,8 @@ proc readExpr(lib: Library, vocab: Vocabulary, exprs: seq[string]): seq[Expr] =
       else:
         if failingLaterLoc <= 0:
           # not sure where to highlight
-          var before = line.substr(0, failingLoc)
-          var failing = line.substr(failingLoc-1)
+          var before = line.substr(0, failingLoc-1)
+          var failing = line.substr(failingLoc)
           stderr.styledWriteLine "   " & before, fgRed, failing
         else:
           var before = line.substr(0, failingLoc-1)
@@ -85,5 +85,5 @@ when isMainModule:
   var lib = openSqliteLibrary()
   import cligen
   cligen.dispatchMulti(
-    [p],  [n], [fromStdin], [bench]
+    [p], [n], [fromStdin], [bench]
   )
