@@ -152,12 +152,13 @@ let tokenPegParser = peg("toplevel", ps: TokenParseState):
 # for testing
 proc processTokenStream*(p: var ParseState) =
   var tps = TokenParseState(strLen: p.input.len)
-  let matches = tokenPegParser.match(p.input, tps)
-  p.tokens = tps.s
-  if not matches.ok:
-    p.kind = parseFail
-    p.loc = matches.matchMax-1
-    p.message = "Failed to parse"
+  if p.input.len > 0:
+    let matches = tokenPegParser.match(p.input, tps)
+    p.tokens = tps.s
+    if not matches.ok:
+      p.kind = parseFail
+      p.loc = matches.matchMax-1
+      p.message = "Failed to parse"
 
 # A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate vocab backtracking.
 # All pushes and pops are guaranteed to
@@ -261,6 +262,8 @@ proc structuralize*(ps: var ParseState, context = ":top".toID) =
   ps.tokens = resolved.toSeq
 
 proc processExprs*(ps: var ParseState) =
+  ## convert a tokenStream into Expressions
+  ## and save them in ParseState
   var stack: seq[Expr] = @[Expr()]
   var processed: seq[DexprToken]
   if ps.kind == parseOk:

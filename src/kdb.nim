@@ -33,7 +33,7 @@ proc readExpr(lib: Library, vocab: Vocabulary, exprs: seq[string]): seq[Expr] =
           var failing = line.substr(failingLoc, failingLaterLoc-1)
           var after = line.substr(failingLaterLoc)
           stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
-        stderr.styledWriteLine fgRed, "   " & repeat("~", failingLoc), "^"
+        stderr.styledWriteLine fgRed, "   " & repeat("~", max(0, failingLoc)), "^"
         stderr.resetAttributes
         break
       failingLoc -= (line.len + 1) # for the newline
