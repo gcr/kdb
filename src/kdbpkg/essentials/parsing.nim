@@ -143,7 +143,9 @@ let tokenPegParser = peg("toplevel", ps: TokenParseState):
   rawEscape <- >rawEscapeStart:
     ps.s[^1].value.add ($1).substr ps.s[^1].rawStrLitSkipLen
 
-  reflink <- +{'0'..'9', 'a'..'z', 'A'..'Z', '-', '_', ':'}
+  # Identifiers
+  # Note: Keep this is sync with repr/titleCanParse
+  reflink <- +{'0'..'9', 'a'..'z', 'A'..'Z', '-', '_', ':', '!', '?', '/', '~', '%', '$', '@'}
   toplevel <- +(sexp_open * *strlit |
                 mexp_open * *strlit |
                 bare_dexpr * *strlit |
