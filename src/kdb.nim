@@ -2,6 +2,71 @@ import kdbpkg/essentials/[docs, parsing, vocabulary, uuid, repr]
 import kdbpkg/libraries/sqliteLibrary
 import std/[strutils, sequtils, options, streams, times, strformat, terminal]
 import fusion/matching
+import macros
+
+proc writeError(message: varargs[string]) =
+  if isatty(stderr):
+    stderr.styledWrite styleBright, fgRed, "[error] ", fgDefault
+    for msg in message: stderr.write msg
+    stderr.resetAttributes
+    stderr.write("\n")
+  else:
+    stderr.write "[error] "
+    for msg in message: stderr.write msg
+    stderr.write("\n")
+
+proc writeParseError(parser: ParseState) =
+  writeError "Parse error:"
+  # Which token to highlight?
+  var failingLoc = parser.loc
+  var failingLaterLoc = 0
+  for p in parser.tokens:
+    if p.loc > failingLoc:
+      failingLaterLoc = p.loc
+      break
+  # found it
+  for line in parser.input.splitLines():
+    if failingLoc > line.len:
+      stderr.write "   "
+      stderr.writeLine line
+    else:
+      if failingLaterLoc <= 0:
+        # not sure where to highlight
+        var before = line.substr(0, failingLoc-1)
+        var failing = line.substr(failingLoc)
+        if isatty(stderr):
+          stderr.styledWriteLine "   " & before, fgRed, failing
+        else:
+          stderr.writeLine "   " & before & failing
+      else:
+        # we do know where to highlight and stop highlighting
+        var before = line.substr(0, failingLoc-1)
+        var failing = line.substr(failingLoc, failingLaterLoc-1)
+        var after = line.substr(failingLaterLoc)
+        if isatty(stderr):
+          stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
+        else:
+          stderr.writeLine "   " & before & failing & after
+      # Now write the nice arrow
+      if isatty(stderr):
+        stderr.styledWriteLine fgRed, "   " & repeat("~", max(0, failingLoc)), "^"
+        stderr.resetAttributes
+      else:
+        stderr.writeLine "   " & repeat("~", max(0, failingLoc)), "^"
+      break
+    failingLoc -= (line.len + 1) # for the newline
+    failingLaterLoc -= (line.len + 1)
+  writeError parser.message
+
+proc write(doc: Doc, lib: Library, vocab: Vocabulary) =
+  if isatty(stdout):
+    stdout.styledWriteLine fgWhite, $doc.key, " -> ", fgDefault
+  else:
+    stdout.writeLine $doc.key, " -> "
+
+  for e in doc.children:
+    stdout.writeLine lib.reprHumanFriendly(vocab, e)
+
 
 proc readExpr(lib: Library, vocab: Vocabulary, exprs: seq[string]): seq[Expr] =
   var parser = ParseState(input: exprs.join(" "), vocab: vocab)
@@ -9,36 +74,7 @@ proc readExpr(lib: Library, vocab: Vocabulary, exprs: seq[string]): seq[Expr] =
   if parser.kind == parseOk:
     return parser.results
   else:
-    stderr.styledWriteLine styleBright, fgRed, "[error]", fgDefault, " Parse error:"
-    stderr.resetAttributes
-    # Which token to highlight?
-    var failingLoc = parser.loc
-    var failingLaterLoc = 0
-    for p in parser.tokens:
-      if p.loc > failingLoc:
-        failingLaterLoc = p.loc
-        break
-    # found it
-    for line in exprs.join(" ").splitLines():
-      if failingLoc > line.len:
-        stderr.styledWriteLine "   " & line
-      else:
-        if failingLaterLoc <= 0:
-          # not sure where to highlight
-          var before = line.substr(0, failingLoc-1)
-          var failing = line.substr(failingLoc)
-          stderr.styledWriteLine "   " & before, fgRed, failing
-        else:
-          var before = line.substr(0, failingLoc-1)
-          var failing = line.substr(failingLoc, failingLaterLoc-1)
-          var after = line.substr(failingLaterLoc)
-          stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
-        stderr.styledWriteLine fgRed, "   " & repeat("~", max(0, failingLoc)), "^"
-        stderr.resetAttributes
-        break
-      failingLoc -= (line.len + 1) # for the newline
-      failingLaterLoc -= (line.len + 1)
-    stderr.styledWriteLine styleBright, fgRed, "[error] ", fgDefault, parser.message
+    parser.writeParseError()
     quit 1
 
 proc p(exprs: seq[string]) =
@@ -46,7 +82,7 @@ proc p(exprs: seq[string]) =
   var vocab = lib.getFullVocabulary()
   var newExprs = readExpr(lib, lib.getFullVocabulary(), exprs)
   for expr in newExprs:
-    stdout.styledWriteLine lib.reprHumanFriendly(vocab, expr)
+    stdout.writeLine lib.reprHumanFriendly(vocab, expr)
 
 proc fromStdin() =
   var lib = openSqliteLibrary()
@@ -75,11 +111,8 @@ proc n(exprs: seq[string]) =
   var lib = openSqliteLibrary()
   var doc = makeDoc(uuid())
   doc.children = readExpr(lib, lib.getFullVocabulary(), exprs)
-  stdout.styledWrite fgWhite, $doc.key, " -> ", fgDefault, "\n"
-  for e in doc.children:
-    stdout.styledWriteLine lib.reprHumanFriendly(lib.getFullVocabulary(), e)
   lib.add(doc)
-  stderr.styledWrite "Added."
+  write(doc, lib, lib.getFullVocabulary())
 
 when isMainModule:
   var lib = openSqliteLibrary()
@@ -87,3 +120,4 @@ when isMainModule:
   cligen.dispatchMulti(
     [p], [n], [fromStdin], [bench]
   )
+
