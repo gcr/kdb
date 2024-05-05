@@ -22,7 +22,7 @@ proc vow(): string = $vowels[rand(max = vowels.high.int)]
 proc proquint(): string =
     fmt"{con()}{vow()}{con()}{vow()}{con()}"
 
-proc randomLetters(len=5): string =
+proc randomLetters(len=8): string =
     let letters = collect:
         for _ in 0..<len:
             flickr_base88[rand(max=flickr_base88.len-1)]

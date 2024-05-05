@@ -199,8 +199,8 @@ macro defBuiltinDoc*(id: ID, body: untyped): untyped =
 # Time to bootstrap our builtins.
 # These first nodes specify IDs manually.
 let
-    idVocab = ":litom-mahut".toId
-    idTitle = ":hakot-teret".toId
+    idVocab = ":VSzg5".toId
+    idTitle = ":qyQgm".toId
     topDoc* = defBuiltinDoc ":top".toId:
         idTitle "Top scope"
     vocabFor* = defBuiltinDoc idVocab:
@@ -209,7 +209,7 @@ let
     title* = defBuiltinDoc idTitle:
         vocabFor ":top"
         idTitle "title"
-    vocabHas* = defBuiltinDoc ":binar-fotar".toId:
+    vocabHas* = defBuiltinDoc ":EV62N".toId:
         vocabFor ":top"
         title "vocab-has"
         title "vocab-child"

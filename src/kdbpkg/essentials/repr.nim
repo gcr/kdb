@@ -6,6 +6,12 @@ import resolution
 import sequtils
 import fusion/matching
 import json
+import re
+
+proc titleOk(d: Doc): bool =
+
+
+
 
 proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr,
         context = ":top".toID): string =

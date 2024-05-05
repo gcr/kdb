@@ -351,11 +351,11 @@ suite "Structuralization":
       structure("(doc (head (author \"Kimmy\" (h1 \"Foo\")))")==
         "28: Couldn't unambiguously resolve symbol h1 inside :author"
       structure("title \"Foo\" title \"Bar\"")==
-        "pushi(:hakot-teret) str(Foo) popi pushi(:hakot-teret) str(Bar) popi"
+        "pushi(:qyQgm) str(Foo) popi pushi(:qyQgm) str(Bar) popi"
       structure("title \"Foo\" (title \"Bar\")")==
-        "pushi(:hakot-teret) str(Foo) popi push(:hakot-teret) str(Bar) pop"
+        "pushi(:qyQgm) str(Foo) popi push(:qyQgm) str(Bar) pop"
       structure("title \"Foo\" author title \"Bar\"")==
-        "pushi(:hakot-teret) str(Foo) popi pushi(:doc) pushi(:head) pushi(:author) popi popi popi pushi(:hakot-teret) str(Bar) popi"
+        "pushi(:qyQgm) str(Foo) popi pushi(:doc) pushi(:head) pushi(:author) popi popi popi pushi(:qyQgm) str(Bar) popi"
       structure("author author author ")==
         "pushi(:doc) pushi(:head) pushi(:author) popi pushi(:author) popi pushi(:author) popi popi popi"
       structure("author (author (author)) ")==
