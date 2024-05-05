@@ -82,12 +82,17 @@ proc hash*(id: ID): Hash {.borrow.}
 proc `==`*(a, b: ID): bool {.borrow.}
 proc `$`*(a: ID): string {.borrow.}
 proc len*(a: ID): int {.borrow.}
-proc toID*(str: string): ID =
+
+proc toID*(str: string): Option[ID] =
     if unlikely(str.len <= 1):
-        raise newException(ValueError, "IDs cannot be blank")
+        #raise newException(ValueError, "IDs cannot be blank")
+        return none(ID)
     if unlikely(str[0] != ':'):
-        raise newException(ValueError, "ID must start with :. Given " & str)
-    return ID(str)
+        #raise newException(ValueError, "ID must start with :. Given " & str)
+        return none(ID)
+    if unlikely(" " in str):
+        return none(ID)
+    return some ID(str)
 
 converter toExpr*(doc: Doc): Expr =
     ## Anywhere an Expr is needed, a Doc can be used.
@@ -199,9 +204,9 @@ macro defBuiltinDoc*(id: ID, body: untyped): untyped =
 # Time to bootstrap our builtins.
 # These first nodes specify IDs manually.
 let
-    idVocab = ":VSzg5".toId
-    idTitle = ":qyQgm".toId
-    topDoc* = defBuiltinDoc ":top".toId:
+    idVocab = ":VSzg5".ID
+    idTitle = ":qyQgm".ID
+    topDoc* = defBuiltinDoc ID":top":
         idTitle "Top scope"
     vocabFor* = defBuiltinDoc idVocab:
         idVocab ":top"
@@ -209,7 +214,7 @@ let
     title* = defBuiltinDoc idTitle:
         vocabFor ":top"
         idTitle "title"
-    vocabHas* = defBuiltinDoc ":EV62N".toId:
+    vocabHas* = defBuiltinDoc ID":EV62N":
         vocabFor ":top"
         title "vocab-has"
         title "vocab-child"

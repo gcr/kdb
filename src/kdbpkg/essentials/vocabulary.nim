@@ -49,11 +49,13 @@ method getFullVocabulary*(library: Library): Vocabulary {.base.} =
   ## expressions
   for nextDoc in library.searchFor vocabFor.key:
     for prev in nextDoc / vocabFor:
-      addVocab(toId(prev.val), nextDoc)
+      if Some(@id) ?= prev.val.toId:
+        addVocab(id, nextDoc)
   ## Docs with (vocab-has ":something") can contain :something
   ## expressions. Typically these also need to be "vocab for"
   ## some other node to be resolved anywhere.
   for prevDoc in library.searchFor vocabHas.key:
     for next in prevDoc / vocabHas:
-      if Some(@nextDoc) ?= lookupDoc(next.val.toId):
-        addVocab(prevDoc.key, nextDoc)
+      if Some(@nextId) ?= next.val.toId:
+        if Some(@nextDoc) ?= lookupDoc(nextId):
+          addVocab(prevDoc.key, nextDoc)

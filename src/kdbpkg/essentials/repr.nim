@@ -35,7 +35,7 @@ proc reprTitleOrId*(univ: Library, vocab: Vocabulary, context: ID, expr: Expr): 
     # not a chance: just return ":key"
     return $expr.kind
 
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ":top".toID, pieces: var seq[string]) =
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ID":top", pieces: var seq[string]) =
     pieces.add "("
     pieces.add reprTitleOrId(univ, vocab, context, expr)
     if expr.val != "":
@@ -47,7 +47,7 @@ proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = 
             reprHumanFriendly(univ, vocab, child, expr.kind, pieces)
     pieces.add ")"
 
-proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ":top".toID): string =
+proc reprHumanFriendly*(univ: Library, vocab: Vocabulary, expr: Expr, context = ID":top"): string =
     var pieces: seq[string]
     reprHumanFriendly(univ, vocab, expr, context, pieces)
     return pieces.join()

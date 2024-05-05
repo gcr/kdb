@@ -77,7 +77,8 @@ iterator allDocs*(library: SqliteLibrary): Doc =
         var parser = ParseState(input: row[1])
         parser.parse
         if parser.kind == parseOk:
-            yield Doc(key: row[0].toID, children: parser.results)
+            if Some(@id) ?= row[0].toID:
+                yield Doc(key: id, children: parser.results)
 
 method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     let row = library.db.getRow(sql"select id, val from docs where id=?", id)
@@ -87,8 +88,9 @@ method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     parser.parse
     if parser.kind != parseOk:
         raise newException(ValueError, parser.message)
-    return some Doc(key: row[0].toID,
-                    children: parser.results)
+    if Some(@id) ?= row[0].toID:
+        return some Doc(key: id,
+                        children: parser.results)
 
 
 
@@ -121,8 +123,9 @@ method contains*(library: SqliteLibrary, key: ID): bool =
 
 method searchFor*(library: SqliteLibrary, kind: ID): seq[Doc] =
     for row in library.db.rows(sql"select parent_id from subexpr_cache where child_id = ?", kind):
-        if Some(@doc) ?= library.lookup(row[0].toID):
-            result.add doc
+        if Some(@id) ?= row[0].toID:
+            if Some(@doc) ?= library.lookup(id):
+                result.add doc
 
 #method getFullVocabulary*(library: SqliteLibrary): Vocabulary =
 #    if library.vocabCache.isNone:

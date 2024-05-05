@@ -19,7 +19,8 @@ converter toTitleId*(x: string): TitleId =
     else:
         result.title = x[0..<idx]
         if x[idx..x.high] != ":":
-            result.id = toId(x[idx..x.high])
+            # skip toId
+            result.id = ID(x[idx..x.high])
 
 proc uidMatches*(a: Doc, b: TitleId): bool =
     if b.id.len > 0:
@@ -77,7 +78,7 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[
             paths[last] = path
             for nextVocab in vocab[last.key]:
                 if nextVocab notin seen:
-                    if nextVocab.key != ":top".toID:
+                    if nextVocab.key != ID":top":
                         stack.add (nextVocab, concat(path, @[nextVocab]))
                 else:
                     seenTwice.incl nextVocab
