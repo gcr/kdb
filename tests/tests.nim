@@ -24,7 +24,7 @@ suite "Bulit-in refs":
     let docs: seq[Doc] = vocabFor.items.toSeq.mapIt(
       builtins.lookup(it.kind).get())
     let titles = docs.mapIt(it.firstTitle)
-    check titles == @[some "vocab-for", some "title"]
+    check titles == @[some "vocab-for", some "title", some "summary"]
 
   test "Multiple children":
     let x = newDoc ID":multichild":

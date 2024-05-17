@@ -124,28 +124,36 @@ liftOptional(key, Doc, ID)
 liftOptional(kind, Expr, ID)
 liftOptional(val, Expr, string)
 
+## Library methods.
 method lookup*(library: Library, id: ID): Option[Doc] {.base.} = none(Doc)
-    ## Lookup a doc by ID
+    ## Lookup a doc by ID.
 method lookup*(library: MapLibrary, id: ID): Option[Doc] =
+    ## Lookup a doc by ID.
     if id in library.docs: return some(library.docs[id])
 proc lookupDocForExpr*(library: Library, expr: Expr): Option[Doc] =
-    ## returns the vocab-defining Doc for a given Expr
+    ## Maps an `expr` to its own definition in the database.
     return library.lookup(expr.kind)
-
-
-
 method add*(library: Library, docs: varargs[Doc]): Doc {.discardable, base.} =
-    ## add an Doc to the library
+    ## Add a Doc to the library.
     raise newException(ObjectAssignmentDefect, "Cannot add a ref to an abstract base library")
 method add*(library: MapLibrary, docs: varargs[Doc]): Doc {.discardable.} =
+    ## Add a Doc to the library.
     for exp in docs:
         library.docs[exp.key] = exp
     docs[0]
 method contains*(library: Library, key: ID): bool {.base.} = false
+    ## Returns `true` if `key` exists in the library.
 method contains*(library: MapLibrary, key: ID): bool =
+    ## Returns `true` if `key` exists in the library.
     key in library.docs
 
-# Built-in library
+## Built-in library.
+## External C code probably needs to call NimMain() for setup --
+## we define all sorts of builtins right at the top level
+## of these nim scripts. This also means that just `importing`
+## nim modules has the side effect of adding their builtins
+## to your database, but since Doc IDs are assumed to be
+## *global and immutable*, that's probably a feature.
 var builtins* = MapLibrary()
 proc newMapLibrary*(): MapLibrary =
     MapLibrary(docs: builtins.docs)
@@ -154,40 +162,39 @@ iterator allBuiltins*(): Doc =
     for doc in builtins.docs.values:
         yield doc
 
+## Macros for parsing refs and their bodies
 proc makeDoc*(id: ID, items: varargs[Expr]): Doc =
     Doc(key: id, children: items.toSeq)
 proc newExpr*(doc: Doc, val: string = "", items: varargs[Expr] = []): Expr =
     Expr(kind: doc.key, val: val, children: items.toSeq)
 proc newExpr*(key: ID, val: string = "", items: varargs[Expr] = []): Expr =
     Expr(kind: key, val: val, children: items.toSeq)
-
-# Macro for parsing refs and their bodies
-proc macroBodyToExpr(body: NimNode): NimNode {.compileTime.} =
+proc macroBodyToExpr*(body: NimNode): NimNode {.compileTime.} =
     result = newNimNode(nnkCall)
     result.add bindSym"newExpr"
-    case body:
-    of Ident(strVal: @name):
+    case (body.kind, body):
+    of (nnkIdent, _):
+        # reference to doc
         result.add body
-    of Command[Ident(),
-               StrLit()]:
-        result.add body[0]
-        result.add body[1]
-    of Command[Ident(),
-               StrLit(),
-               StmtList[all @stmts]]:
-        result.add body[0]
-        result.add body[1]
+    of ({nnkCommand, nnkCall}, [@ident, @val is StrLit()]):
+        result.add ident
+        result.add val
+    of ({nnkCommand, nnkCall}, [@ident, @val(it.kind in {nnkIdent, nnkSym})]):
+        result.add ident
+        result.add nnkCall.newTree(bindSym"$",
+            nnkDotExpr.newTree(val, bindSym"key"))
+    of (nnkExprEqExpr, [@ident, @val(it.kind notin {nnkStmtList})]):
+        result.add ident, val
+    of ({nnkCommand, nnkCall}, [@ident, @val, StmtList[all @stmts]]):
+        result.add ident, val
         for child in stmts:
             result.add child.macroBodyToExpr
-    of Call[Ident(),
-            StmtList[all @stmts]]:
-        result.add body[0]
-        result.add newLit("")
+    of ({nnkCommand, nnkCall}, [@ident, StmtList[all @stmts]]):
+        result.add ident, quote do: ""
         for child in stmts:
             result.add child.macroBodyToExpr
     else:
-        raise newException(Defect, "Invalid syntax for ref definition: " & body.treeRepr)
-# the real nice macros
+        raise newException(Defect, "Invalid syntax for ref definition:\n" & body.treeRepr)
 macro newDoc*(id: ID): untyped =
     result = nnkCall.newTree(bindsym"makeDoc", id)
 macro newDoc*(id: ID, body: untyped): untyped =
@@ -196,28 +203,41 @@ macro newDoc*(id: ID, body: untyped): untyped =
         result.add macroBodyToExpr(child)
 macro defBuiltinDoc*(id: ID): untyped =
     quote do:
+        assert `id` notin builtins
+        assert ($`id`).toID.isSome, "ID must be well-formed"
         builtins.add newDoc(`id`)
 macro defBuiltinDoc*(id: ID, body: untyped): untyped =
     quote do:
+        assert `id` notin builtins
+        assert ($`id`).toID.isSome, "ID must be well-formed"
         builtins.add newDoc(`id`, `body`)
 
 # Time to bootstrap our builtins.
 # These first nodes specify IDs manually.
 let
-    idVocab = ":VSzg5".ID
-    idTitle = ":qyQgm".ID
+    idVocab = ID":VSzg5"
+    idTitle = ID":qyQgm"
+    idSummary = ID":otNaZ"
     topDoc* = defBuiltinDoc ID":top":
         idTitle "Top scope"
+        idsummary "All vocab inherits from this special doc."
     vocabFor* = defBuiltinDoc idVocab:
         idVocab ":top"
         idTitle "vocab-for"
+        idSummary "Allows this doc to become vocab for the indicated doc."
     title* = defBuiltinDoc idTitle:
         vocabFor ":top"
         idTitle "title"
+        idSummary "User-friendly doc title. Docs may have multiple titles. Titles are searchable by name."
     vocabHas* = defBuiltinDoc ID":EV62N":
         vocabFor ":top"
         title "vocab-has"
         title "vocab-child"
+        idSummary "Allows the indicated doc to become vocab for this doc."
+    summary* = defBuiltinDoc idSummary:
+        vocabfor ":top"
+        title "summary"
+        idSummary "One-line summary of vocab entries."
 
 # Basic ops
 # IMPORTANT: We never want to call a / b when b is an Expr.

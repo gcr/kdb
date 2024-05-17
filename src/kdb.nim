@@ -1,5 +1,6 @@
 import kdbpkg/essentials/[docs, parsing, vocabulary, uuid, repr]
 import kdbpkg/libraries/sqliteLibrary
+import kdbpkg/builtins/textual
 import std/[strutils, sequtils, options, streams, times, strformat, terminal]
 import fusion/matching
 import macros
@@ -112,7 +113,8 @@ proc n(exprs: seq[string]) =
   var doc = makeDoc(uuid())
   doc.children = readExpr(lib, lib.getFullVocabulary(), exprs)
   lib.add(doc)
-  write(doc, lib, lib.getFullVocabulary())
+  #write(doc, lib, lib.getFullVocabulary())
+  stdout.write(doc.key)
 
 when isMainModule:
   var lib = openSqliteLibrary()

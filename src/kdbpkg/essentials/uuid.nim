@@ -33,7 +33,7 @@ proc randomLetters(len=5): string =
 
 proc uuid*(): ID =
     #toID(fmt":{proquint()}-{proquint()}")
-    toID(randomLetters(5))
+    ID(randomLetters(5))
 
 when isMainModule:
     echo uuid()
