@@ -28,6 +28,13 @@ import strformat
 ##   say, textual documents, then it can add vocab-for ":textual"
 ##   and other clients should handle that gracefully even if they
 ##   don't know how to render it.
+##
+## This file lets us quickly define vocabulary trees for nim code.
+## Great for writing plugins, processors, filters, etc.
+## That way, there's a 1-to-1 relationship between the vocab that
+## exists in the builtin docs and a Nim identifier.
+##
+## TODO: I would _love_ to typecheck this.
 
 proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", useVocabHas=true, useVocabFor=false): (seq[NimNode], NimNode) {.compileTime.} =
     assert useVocabHas xor useVocabFor, "Need to use EITHER vocabHas (top-down) OR vocabFor (bottom-up), but not both"
@@ -55,7 +62,7 @@ proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", u
                     for doc in childKeys:
                         subexpr.add macroBodyToExpr(quote do: vocabHas `doc`)
             resultStmts.add quote do:
-                let `ident`* = `subexpr`
+                let `ident`* = builtins.add `subexpr`
         of (nnkIdent, @sym):
             # Reuse some previously-defined doc as vocab child
             resultKeys.add sym
@@ -65,7 +72,7 @@ proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", u
             raise newException(Defect, "Invalid syntax for topdown vocab definition:\n" & node.treeRepr)
     return (resultKeys, resultStmts)
 
-macro defTopDownBuiltinVocab(body: untyped): untyped =
+macro defTopDownBuiltinVocab*(body: untyped): untyped =
     let (_, stmts) = defBuiltinVocabImpl(body, vocabFor=some ":top", useVocabFor=false, useVocabHas=true)
     return stmts
 
