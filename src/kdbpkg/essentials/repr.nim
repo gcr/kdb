@@ -1,9 +1,7 @@
 import docs
 import vocabulary
-import strformat
 import strutils
 import resolution
-import sequtils
 import fusion/matching
 import json
 import re

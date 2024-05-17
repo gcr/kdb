@@ -8,7 +8,8 @@ import ../essentials/vocabMacros
 ## represent an agenda view with complicated queries.
 
 defTopDownBuiltinVocab:
-    externalUrl ":m4mQu", title="external-url",
+    externalUrl ":m4mQu",
+        title="external-url",
         summary="Associates this doc with some external URL, web page, or other resource."
     datePublished ":YFFWL",
         title="date-published",

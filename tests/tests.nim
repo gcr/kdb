@@ -191,6 +191,10 @@ suite "Ref resolution":
     univ.add: newDoc ID":category":
       title "category"
       title "A descendant of head"
+    univ.add: newDoc ID":someDup5":
+      title "Vocab-same-as testing"
+      vocabSameAs ":uuidHead"
+      vocabHas ":dd"
 
   test "Unpolluted builtins":
     check ID":dd" in univ
@@ -280,6 +284,12 @@ suite "Ref resolution":
       # otherwise this might resolve to
       # head->recurse->top->doc->head->recurse...
       vocab.resolveIndirectly("Doc", context=ID":uuidHead").isNone
+
+  test "Vocab-same-as resolution":
+    let vocab = univ.getFullVocabulary()
+    check:
+      vocab.resolveDirectly("category", context=ID":someDup5").key == some ID":category"
+      vocab.resolveDirectly("Doc", context=ID":someDup5").key == some ID":dd"
 
 suite "Structuralization":
   setup:
@@ -402,7 +412,6 @@ suite "Sqlite library":
 
   test "Broken vocab":
     check: "TODO: please add tests to ensure broken vocab's handled properly" == ""
-
   #test "Should never add broken vocab":
   #  expect ValueError:
   #    lib.add: newDoc ID":broken": title "Broken"; vocabFor "nope"

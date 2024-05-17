@@ -1,4 +1,4 @@
-import ../essentials/[docs, parsing, repr, vocabulary]
+import ../essentials/[docs, parsing, vocabulary]
 import db_connector/db_sqlite
 import fusion/matching
 import std/[envvars, appdirs, paths, options, sequtils, strutils, dirs]

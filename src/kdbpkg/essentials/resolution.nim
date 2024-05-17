@@ -6,7 +6,6 @@ import fusion/matching
 import tables
 import hashes
 import sets
-import sequtils
 {.experimental: "caseStmtMacros".}
 
 type TitleId* = object
@@ -14,6 +13,7 @@ type TitleId* = object
     id*: ID
 
 converter toTitleId*(x: string): TitleId =
+    ## Splits a string like "abc:def" into the title "abc" and ID ":def".
     let idx = x.find ':'
     if idx == -1: result.title = x
     else:
@@ -23,6 +23,10 @@ converter toTitleId*(x: string): TitleId =
             result.id = ID(x[idx..x.high])
 
 proc uidMatches*(a: Doc, b: TitleId): bool =
+    ## Returns true if a doc's ID matches.
+    ## If both ID and title are specified, the ID must
+    ## match *and* the doc must have a title that exactly
+    ## matches as well.
     if b.id.len > 0:
         if a.key == b.id:
             if b.title.len > 0:
@@ -33,12 +37,18 @@ proc uidMatches*(a: Doc, b: TitleId): bool =
                 return true
 
 proc titleMatchesExactly*(a: Doc, b: TitleId): bool =
+    ## Returns true if the title matches the doc. If ID
+    ## is specified, returns false -- use uidMatches
+    ## instead.
     if b.id.len == 0:
         for title in a.allTitles:
             if title == b.title:
                 return true
 
 proc titleMatchesNormalized*(a: Doc, b: TitleId): bool =
+    ## Returns true if the title "almost" matches the doc.
+    ## If ID is specified, returns false -- use uidMatches
+    ## instead.
     if b.id.len == 0:
         for title in a.allTitles:
             let atitle = title.replace("-").replace("_").toLowerAscii
@@ -46,10 +56,14 @@ proc titleMatchesNormalized*(a: Doc, b: TitleId): bool =
             if atitle == btitle:
                 return true
 
-proc onlyMatch(vocabEntries: HashSet[Doc], title: string, matchMethod: proc(
-        a: Doc, b: TitleID): bool): Option[Doc] =
+proc onlyOneMatch(entries: HashSet[Doc],
+                  title: string,
+                  matchMethod: proc(a: Doc, b: TitleID): bool): Option[Doc] =
+    ## Returns title's only match among vocabEntries, if it exists.
+    ## matchMethod specifies how the matches are counted.
+    ## If multiple matches are possible, returns nothing.
     var count = 0
-    for doc in vocabEntries:
+    for doc in entries:
         if matchMethod(doc, title):
             result = some doc
             count += 1
@@ -57,34 +71,20 @@ proc onlyMatch(vocabEntries: HashSet[Doc], title: string, matchMethod: proc(
         result = none(Doc)
 
 proc resolveDirectly*(vocab: Vocabulary, title: string, context: ID): Option[Doc] =
+    ## Directly resolves `title` from the context's immediate vocab.
+    ## If direct resolution isn't possible, returns none.
     for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
         if context in vocab:
-            if Some(@vocabRule) ?= vocab[context].onlyMatch(title, mm):
+            if Some(@vocabRule) ?= vocab.following(context).onlyOneMatch(title, mm):
                 return some vocabRule
 
-proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[
-        seq[Doc]] =
-    var seen: HashSet[Doc]
-    var seenTwice: HashSet[Doc]
-    var paths: Table[Doc, seq[Doc]]
-    var stack: seq[(Doc, seq[Doc])]
-    # quick DFS
-    if context in vocab:
-        for nextVocab in vocab[context]:
-            stack.add (nextVocab, @[nextVocab])
-        while stack.len > 0:
-            let (last, path) = stack.pop()
-            seen.incl last
-            paths[last] = path
-            for nextVocab in vocab[last.key]:
-                if nextVocab notin seen:
-                    if nextVocab.key != ID":top":
-                        stack.add (nextVocab, concat(path, @[nextVocab]))
-                else:
-                    seenTwice.incl nextVocab
-        for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
-            if Some(@vocabRule) ?= (seen - seenTwice).onlyMatch(title, mm):
-                return some paths[vocabRule]
+proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
+    let pathsForFollowing = vocab.indirectlyFollowing(context)
+    var following: HashSet[Doc]
+    for k in pathsForFollowing.keys: following.incl k
+    for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
+        if Some(@vocabRule) ?= following.onlyOneMatch(title, mm):
+            return some pathsForFollowing[vocabRule]
     return none(seq[Doc])
 
 proc resolve*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =

@@ -235,9 +235,17 @@ let
         title "vocab-child"
         idSummary "Allows the indicated doc to become vocab for this doc."
     summary* = defBuiltinDoc idSummary:
-        vocabfor ":top"
+        vocabFor ":top"
         title "summary"
         idSummary "One-line summary of vocab entries."
+    vocabExplicitOnly* = defBuiltinDoc ID":S3Es1":
+        vocabFor ":top"
+        title "vocab-explicit-only"
+        summary "Prevents implicit structuralization from expanding into this vocab."
+    vocabSameAs* = defBuiltinDoc ID":W4hyz":
+        vocabFor ":top"
+        title "vocab-same-as"
+        summary "Inherits vocab from the indicated doc. Any vocab for that doc can also appear under this one."
 
 # Basic ops
 # IMPORTANT: We never want to call a / b when b is an Expr.
