@@ -23,14 +23,16 @@ proc addWithoutVersion(library: SqliteLibrary, docs: varargs[
         Doc]): Doc {.discardable.} =
     for doc in docs:
         library.db.exec(sql"""
-        insert into Docs(id, val, lastModified) values(?, ?, unixepoch('subsec'))
-        on conflict(id) do update set val=excluded.val, lastModified=unixepoch('subsec');
+        insert into Docs(id, val, lastModified)
+        values(?, ?, unixepoch('subsec'))
+        on conflict(id) do
+            update set val=excluded.val, lastModified=unixepoch('subsec');
         """, doc.key, doc.children.mapIt($it).join(" "))
         library.db.exec(sql"delete from subexpr_cache where parent_id = ?;", doc.key)
         for expr in doc:
             library.db.exec(sql"""
-            insert or ignore into subexpr_cache(parent_id, child_id, val) values(?, ?, ?)
-            """, doc.key, expr.kind, expr.val)
+            insert or ignore into subexpr_cache(parent_id, child_id) values(?, ?)
+            """, doc.key, expr.kind)
     return docs[0]
 
 proc openSqliteLibrary*(maybePath = ""): SqliteLibrary =
@@ -60,8 +62,7 @@ proc openSqliteLibrary*(maybePath = ""): SqliteLibrary =
     create table if not exists subexpr_cache(
         parent_id TEXT,
         child_id TEXT,
-        val TEXT,
-        unique(parent_id, child_id, val)
+        unique(parent_id, child_id)
     );
     """
     result.db.exec sql"create index if not exists subexpr_cache_child on subexpr_cache(child_id)"
