@@ -56,6 +56,32 @@ proc titleMatchesNormalized*(a: Doc, b: TitleId): bool =
             if atitle == btitle:
                 return true
 
+proc titleMatchesSubstring*(a: Doc, b: TitleID): bool =
+    ## Returns true if the title is an exact substring of the other node
+    if b.id.len == 0:
+        for title in a.allTitles:
+            let atitle = title.replace("-").replace("_").toLowerAscii
+            let btitle = b.title.replace("-").replace("_").toLowerAscii
+            if btitle in atitle:
+                return true
+
+
+proc titleMatchesFuzzy*(a: Doc, b: TitleID): bool =
+    ## Returns true if all chars of the title appear in that order in the doc.
+    if b.id.len == 0:
+        for title in a.allTitles:
+            let atitle = title.replace("-").replace("_").toLowerAscii
+            let btitle = b.title.replace("-").replace("_").toLowerAscii
+            var needle = 0
+            # do all characters of btitle appear in atitle
+            # in the same order?
+            for hay in 0..atitle.high:
+                if atitle[hay] == btitle[needle]:
+                    needle += 1
+                    if needle == btitle.len:
+                        return true
+
+
 proc onlyOneMatch(entries: HashSet[Doc],
                   title: string,
                   matchMethod: proc(a: Doc, b: TitleID): bool): Option[Doc] =
@@ -70,10 +96,18 @@ proc onlyOneMatch(entries: HashSet[Doc],
     if count > 1:
         result = none(Doc)
 
+const MATCH_METHODS = [
+    uidMatches,
+    titleMatchesExactly,
+    titleMatchesNormalized,
+    titleMatchesSubstring,
+    titleMatchesFuzzy,
+]
+
 proc resolveDirectly*(vocab: Vocabulary, title: string, context: ID): Option[Doc] =
     ## Directly resolves `title` from the context's immediate vocab.
     ## If direct resolution isn't possible, returns none.
-    for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
+    for mm in MATCH_METHODS:
         if context in vocab:
             if Some(@vocabRule) ?= vocab.following(context).onlyOneMatch(title, mm):
                 return some vocabRule
@@ -82,7 +116,7 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[s
     let pathsForFollowing = vocab.indirectlyFollowing(context)
     var following: HashSet[Doc]
     for k in pathsForFollowing.keys: following.incl k
-    for mm in [uidMatches, titleMatchesExactly, titleMatchesNormalized]:
+    for mm in MATCH_METHODS:
         if Some(@vocabRule) ?= following.onlyOneMatch(title, mm):
             return some pathsForFollowing[vocabRule]
     return none(seq[Doc])

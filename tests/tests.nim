@@ -173,6 +173,9 @@ suite "Ref resolution":
     univ.add: newDoc ID":uuidDate":
       title "Date"
       vocabFor ":uuidHead"
+    univ.add: newDoc ID":substringPrecedenceMatch":
+      title "Cats"
+      vocabFor ":uuidHead"
     univ.add: newDoc ID":titleButInsideHead":
       title "Title"
       vocabFor ":uuidHead"
@@ -217,6 +220,14 @@ suite "Ref resolution":
       vocab.resolveDirectly("Title", context=ID":top").key == some title.key
       vocab.resolveDirectly("Date", context=ID":top").key == none(ID)
       vocab.resolveDirectly("Date", context=ID":uuidHead").key == some ID":uuidDate"
+      # substring
+      vocab.resolveDirectly("Dat", context=ID":uuidHead").key == some ID":uuidDate"
+      # both substring and fuzzy match return different modes, but substring is less ambiguous so it should be preferred
+      vocab.resolveDirectly("ats", context=ID":uuidHead").key == some ID":substringPrecedenceMatch"
+      # fuzzzy
+      vocab.resolveDirectly("catgy", context=ID":uuidHead").key == some ID":category"
+      vocab.resolveDirectly("D", context=ID":uuidHead").key == none(ID)
+      vocab.resolveDirectly("as", context=ID":uuidHead").key == none(ID)
       vocab.resolveDirectly("DuplicateName", context=ID":uuidHead").isNone
       vocab.resolveDirectly(":someDup2", context=ID":uuidHead").key == some ID":someDup2"
       vocab.resolveDirectly("NONMATCHING:someDup2", context=ID":uuidHead").isNone
