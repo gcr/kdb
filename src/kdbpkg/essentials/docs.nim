@@ -245,6 +245,7 @@ let
     vocabSameAs* = defBuiltinDoc ID":W4hyz":
         vocabFor ":top"
         title "vocab-same-as"
+        title "vocab-alias"
         summary "Inherits vocab from the indicated doc. Any vocab for that doc can also appear under this one."
 
 # Basic ops
