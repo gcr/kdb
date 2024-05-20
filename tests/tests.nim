@@ -198,6 +198,9 @@ suite "Ref resolution":
       title "Vocab-same-as testing"
       vocabSameAs ":uuidHead"
       vocabHas ":dd"
+    proc testResolveIndirectly(vocab: Vocabulary, title: string, context: ID): Option[seq[ID]] =
+      if Some(@path) ?= vocab.resolveIndirectly(title, context):
+        return some path.mapIt(it.key)
 
   test "Unpolluted builtins":
     check ID":dd" in univ
@@ -253,31 +256,28 @@ suite "Ref resolution":
       vocabFor ":uuidHead"
       vocabFor ":recDup"
     let vocab = univ.getFullVocabulary()
-    proc resolveIndirectly(title: string, context: ID): Option[seq[ID]] =
-      if Some(@path) ?= vocab.resolveIndirectly(title, context):
-        return some path.mapIt(it.key)
     check:
-      resolveIndirectly("name-matchMethod_test", context=ID":top").isNone
-      resolveIndirectly("name-matchMethod_test", context=ID":dd").isNone
-      resolveIndirectly("unambiguousName", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":someDup2"]
-      resolveIndirectly("unambiguous-name", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":someDup2"]
-      resolveIndirectly("unambiguousName", context=ID":dd") == some @[ID":uuidHead", ID":someDup2"]
-      resolveIndirectly("unambiguousName", context=ID":travel").isNone
+      vocab.testResolveIndirectly("name-matchMethod_test", context=ID":top").isNone
+      vocab.testResolveIndirectly("name-matchMethod_test", context=ID":dd").isNone
+      vocab.testResolveIndirectly("unambiguousName", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":someDup2"]
+      vocab.testResolveIndirectly("unambiguous-name", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":someDup2"]
+      vocab.testResolveIndirectly("unambiguousName", context=ID":dd") == some @[ID":uuidHead", ID":someDup2"]
+      vocab.testResolveIndirectly("unambiguousName", context=ID":travel").isNone
 
       # only one node appearing in many contexts
       vocab.resolveDirectly("RecursiveDuplicate", context=ID":top").isNone
-      resolveIndirectly("RecursiveDuplicate", context=ID":top").isNone
+      vocab.testResolveIndirectly("RecursiveDuplicate", context=ID":top").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context=ID":dd").key == some ID":recDup"
-      resolveIndirectly("RecursiveDuplicate", context=ID":dd").isNone
+      vocab.testResolveIndirectly("RecursiveDuplicate", context=ID":dd").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context=ID":travel").key == some ID":recDup"
-      resolveIndirectly("RecursiveDuplicate", context=ID":travel").isNone
-      resolveIndirectly("RecursiveDuplicate", context=ID":uuidHead").isNone
+      vocab.testResolveIndirectly("RecursiveDuplicate", context=ID":travel").isNone
+      vocab.testResolveIndirectly("RecursiveDuplicate", context=ID":uuidHead").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context=ID":uuidHead").key == some ID":recDup"
-      resolveIndirectly("RecursiveDuplicate", context=ID":recDup").isNone
+      vocab.testResolveIndirectly("RecursiveDuplicate", context=ID":recDup").isNone
       vocab.resolveDirectly("RecursiveDuplicate", context=ID":recDup").key == some ID":recDup"
 
       # vocabHas and vocabFor
-      resolveIndirectly("category", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":category"]
+      vocab.testResolveIndirectly("category", context=ID":top") == some @[ID":dd", ID":uuidHead", ID":category"]
 
   test "Recursive top resolution":
     univ.add: newDoc ID":meh-meh":
@@ -301,6 +301,24 @@ suite "Ref resolution":
     check:
       vocab.resolveDirectly("category", context=ID":someDup5").key == some ID":category"
       vocab.resolveDirectly("Doc", context=ID":someDup5").key == some ID":dd"
+
+  test "Explicit-only vocab should inhibit indirect resolution.":
+    univ.add: newDoc ID":abc":
+      vocabFor ":top"
+      title "itestDoc"
+    univ.add: newDoc ID":def":
+      vocabFor ":abc"
+      vocabExplicitOnly
+      title "itestMyBody"
+    univ.add: newDoc ID":ghi":
+      vocabFor ":def"
+      title "itestHeading"
+    let vocab = univ.getFullVocabulary()
+    check:
+      vocab.testResolveIndirectly("itestMyBody", context=ID":top") == some @[ID":abc", ID":def"]
+      vocab.testResolveIndirectly("itestHeading", context=ID":top").isNone
+      vocab.resolveDirectly("itestMyBody", context=ID":abc").key == some ID":def"
+      vocab.resolveDirectly("itestHeading", context=ID":def").key == some ID":ghi"
 
 suite "Structuralization":
   setup:

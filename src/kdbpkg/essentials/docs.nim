@@ -218,9 +218,11 @@ let
     idVocab = ID":VSzg5"
     idTitle = ID":qyQgm"
     idSummary = ID":otNaZ"
+    idVocabExplicitOnly = ID":S3Es1"
     topDoc* = defBuiltinDoc ID":top":
         idTitle "Top scope"
         idsummary "All vocab inherits from this special doc."
+        idVocabExplicitOnly ""
     vocabFor* = defBuiltinDoc idVocab:
         idVocab ":top"
         idTitle "vocab-for"
@@ -238,7 +240,7 @@ let
         vocabFor ":top"
         title "summary"
         idSummary "One-line summary of vocab entries."
-    vocabExplicitOnly* = defBuiltinDoc ID":S3Es1":
+    vocabExplicitOnly* = defBuiltinDoc idVocabExplicitOnly:
         vocabFor ":top"
         title "vocab-explicit-only"
         summary "Prevents implicit structuralization from expanding into this vocab."

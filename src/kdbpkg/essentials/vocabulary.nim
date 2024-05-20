@@ -58,12 +58,12 @@ proc indirectlyFollowing*(vocab: Vocabulary, context: ID): Table[Doc, seq[Doc]] 
       while stack.len > 0:
           let (last, path) = stack.pop()
           result[last] = path
-          for nextVocab in vocab.following last.key:
-              if nextVocab notin result:
-                  if nextVocab.key != ID":top":
+          if not last.has vocabExplicitOnly:
+            for nextVocab in vocab.following last.key:
+                if nextVocab notin result:
                       stack.add (nextVocab, concat(path, @[nextVocab]))
-              else:
-                  seenTwice.incl nextVocab
+                else:
+                    seenTwice.incl nextVocab
   for doc in seenTwice:
     result.del doc
 
