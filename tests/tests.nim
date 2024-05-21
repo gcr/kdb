@@ -11,6 +11,30 @@ import std/files
 import std/paths
 import tables
 
+suite "Nim syntax smoketests":
+  test "Doc syntax":
+    # this doesn't validate, but it's an example
+    let base = newDoc ID":abcd":
+      title "Hello"
+      vocabFor(vocabHas("abcd", title("defg")))
+    let base2 = newDoc(ID":abcd", title("Hello"), vocabFor(vocabHas("abcd", title("defg"))))
+    check $base == $base2
+    let base3 = newDoc(ID":abcd", title="Hello", vocabFor=vocabHas("abcd", title="defg"))
+    check $base == $base3
+    let base4 = newDoc ID":abcd":
+      title "Hello"
+      vocabFor:
+        vocabHas:
+          "abcd"
+          title "defg"
+    check $base == $base4
+    let base5 = newDoc ID":abcd":
+      title "Hello"
+      vocabFor:
+        vocabHas("abcd"):
+          title "defg"
+    check $base == $base5
+
 suite "Bulit-in refs":
   test "Essential ref operations":
     check:

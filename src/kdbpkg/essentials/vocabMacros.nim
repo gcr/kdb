@@ -46,11 +46,11 @@ proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", u
         case (node.kind, node):
         of (in {nnkCall, nnkCommand},[@ident, StrLit(strVal: @key), until @kvItems is StmtList(), opt @subVocab]):
             resultKeys.add quote do: `key`
-            var subexpr = quote do: makeDoc(ID`key`)
+            var subexpr = quote do: newDoc(ID`key`)
             if Some(@vocabForKey) ?= vocabFor:
-                subexpr.add macroBodyToExpr(quote do: vocabFor `vocabForKey`)
+                subexpr.add quote do: vocabFor `vocabForKey`
             for node in kvItems:
-                subexpr.add macroBodyToExpr(node)
+                subexpr.add node
             if Some(@subVocab) ?= subVocab:
                 let (childkeys, childStatements) = defBuiltinVocabImpl(
                     subVocab, if useVocabFor: some key else: none(string),
@@ -60,7 +60,7 @@ proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", u
                     resultStmts.add child
                 if useVocabHas:
                     for doc in childKeys:
-                        subexpr.add macroBodyToExpr(quote do: vocabHas `doc`)
+                        subexpr.add quote do: vocabHas `doc`
             resultStmts.add quote do:
                 doAssert(ID(`key`) notin builtins)
                 let `ident`* = builtins.add `subexpr`
