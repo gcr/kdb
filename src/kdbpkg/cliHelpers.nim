@@ -4,6 +4,7 @@ import builtins/textual
 import std/[strutils, sequtils, options, streams, times, strformat, terminal, os, tables]
 import fusion/matching
 import macros
+import prettyprinting
 import json
 import deques
 
@@ -49,10 +50,16 @@ proc writeToken*(dt: DexprToken, lib: Library, withColor=stdout.isatty(), emphas
       if Some(@doc) ?= lib.lookup(id):
         if Some(@title) ?= doc.firstTitle:
             wrote = true
-            write(title)
+            if dt.inferredFromImplicitResolution:
+                writeSubtle(title)
+            else:
+                write(title)
             writeSubtle(dt.symbol)
     if not wrote:
-        write(dt.symbol)
+        if dt.inferredFromImplicitResolution:
+            writeSubtle(dt.symbol)
+        else:
+            write(dt.symbol)
   case dt.kind:
   of dtkPushNewContextImplicitly:
     writeSubtle " ("
@@ -95,46 +102,48 @@ proc writeParseError*(parser: ParseState, lib: Library) =
   parser.unprocessed.writeTokens(lib)
   stdout.write "\n"
   writeError "Parse error:"
+  writeError $parser.locToInputDesc(parser.loc)
   # Which token to highlight?
-  var failingLoc = parser.loc
-  var failingLaterLoc = 0
-  for p in parser.tokens:
-    if p.loc > failingLoc:
-      failingLaterLoc = p.loc
-      break
-  # found it
-  for line in parser.input.splitLines():
-    if failingLoc > line.len:
-      stderr.write "   "
-      stderr.writeLine line
-    else:
-      if failingLaterLoc <= 0:
-        # not sure where to highlight
-        var before = line.substr(0, failingLoc-1)
-        var failing = line.substr(failingLoc)
-        if isatty(stderr):
-          stderr.styledWriteLine "   " & before, fgRed, failing
-        else:
-          stderr.writeLine "   " & before & failing
-      else:
-        # we do know where to highlight and stop highlighting
-        var before = line.substr(0, failingLoc-1)
-        var failing = line.substr(failingLoc, failingLaterLoc-1)
-        var after = line.substr(failingLaterLoc)
-        if isatty(stderr):
-          stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
-        else:
-          stderr.writeLine "   " & before & failing & after
-      # Now write the nice arrow
-      if isatty(stderr):
-        stderr.styledWriteLine fgRed, "   " & repeat("~", max(0, failingLoc)), "^"
-        stderr.resetAttributes
-      else:
-        stderr.writeLine "   " & repeat("~", max(0, failingLoc)), "^"
-      break
-    failingLoc -= (line.len + 1) # for the newline
-    failingLaterLoc -= (line.len + 1)
+  #var failingLoc = parser.loc
+  #var failingLaterLoc = 0
+  #for p in parser.tokens:
+  #  if p.loc > failingLoc:
+  #    failingLaterLoc = p.loc
+  #    break
+  ## found it
+  #for line in parser.input.splitLines():
+  #  if failingLoc > line.len:
+  #    stderr.write "   "
+  #    stderr.writeLine line
+  #  else:
+  #    if failingLaterLoc <= 0:
+  #      # not sure where to highlight
+  #      var before = line.substr(0, failingLoc-1)
+  #      var failing = line.substr(failingLoc)
+  #      if isatty(stderr):
+  #        stderr.styledWriteLine "   " & before, fgRed, failing
+  #      else:
+  #        stderr.writeLine "   " & before & failing
+  #    else:
+  #      # we do know where to highlight and stop highlighting
+  #      var before = line.substr(0, failingLoc-1)
+  #      var failing = line.substr(failingLoc, failingLaterLoc-1)
+  #      var after = line.substr(failingLaterLoc)
+  #      if isatty(stderr):
+  #        stderr.styledWriteLine "   ", before, fgRed, failing, fgDefault, after
+  #      else:
+  #        stderr.writeLine "   " & before & failing & after
+  #    # Now write the nice arrow
+  #    if isatty(stderr):
+  #      stderr.styledWriteLine fgRed, "   " & repeat("~", max(0, failingLoc)), "^"
+  #      stderr.resetAttributes
+  #    else:
+  #      stderr.writeLine "   " & repeat("~", max(0, failingLoc)), "^"
+  #    break
+  #  failingLoc -= (line.len + 1) # for the newline
+  #  failingLaterLoc -= (line.len + 1)
   writeError parser.message
+  echo $parser
 
 proc parseCliOptions*(opts: seq[string], lib: Library, vocab: Vocabulary, rootContext: ID): tuple[options:CLIOptions, exprs: seq[Expr]] =
   result.options = CLIOptions()
@@ -162,7 +171,12 @@ proc parseCliOptions*(opts: seq[string], lib: Library, vocab: Vocabulary, rootCo
       result.options.humanReadableOutput = false
     else:
       tokens.add(nextTok)
-  var parser = ParseState(input: tokens.join(" "), vocab: vocab)
+
+  var parser = ParseState(
+    vocab: vocab,
+  )
+  for cliIdx, cliOpt in tokens.pairs():
+    parser.inputs.add ParseInput(name: fmt"argument {cliIdx+1}", content: cliOpt)
   parser.parse(rootContext=rootContext)
   if parser.kind == parseOk:
     result.exprs = parser.results

@@ -74,18 +74,17 @@ proc close*(library: SqliteLibrary) =
     library.db.close()
 
 iterator allDocs*(library: SqliteLibrary): Doc =
-    for row in library.db.rows(sql"select id, val from docs"):
-        var parser = ParseState(input: row[1])
-        parser.parse
-        if parser.kind == parseOk:
-            if Some(@id) ?= row[0].toID:
-                yield Doc(key: id, children: parser.results)
+    for row in library.db.rows(sql"select id from docs"):
+        if Some(@id) ?= row[0].toID:
+            if Some(@doc) ?= library.lookup(id):
+                yield doc
 
 method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
     let row = library.db.getRow(sql"select id, val from docs where id=?", id)
     if row[0] == "":
         return none(Doc)
-    var parser = ParseState(input: row[1])
+    var parser = ParseState()
+    parser.inputs.add ParseInput(name: "database contents", content: row[1])
     parser.parse
     if parser.kind != parseOk:
         raise newException(ValueError, parser.message)

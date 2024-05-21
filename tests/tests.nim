@@ -9,7 +9,6 @@ import std/strformat
 import std/tempfiles
 import std/files
 import std/paths
-import tables
 
 suite "Nim syntax smoketests":
   test "Doc syntax":
@@ -95,7 +94,8 @@ suite "Bulit-in refs":
 
 suite "Dexpr parsing":
   proc tokenize(input: string): string =
-    var parser = ParseState(input: input)
+    var parser = ParseState()
+    parser.inputs.add ParseInput(name: "test input", content: input)
     parser.processTokenStream()
     let tokens = parser.tokens.mapIt($it)
     return tokens.join(" ")
@@ -115,7 +115,7 @@ suite "Dexpr parsing":
           "push(x) push(y) push(z) push(w) pop pop"
       tokenize("()")==""
       tokenize("() x")==""
-      tokenize("\"juice\"")==""
+      tokenize("\"juice\"")=="str(juice)" # will get parsed away
       tokenize("(\"juice\"")==""
       tokenize("(foo")=="push(foo)"
       tokenize("(foo bar")==
@@ -133,7 +133,8 @@ suite "Dexpr parsing":
       tokenize("(foo \"bad")=="push(foo) stri(bad)"
 
   proc parseString(str:string):string =
-    var parser = ParseState(input: "(open "&str)
+    var parser = ParseState()
+    parser.inputs.add ParseInput(name: "test input", content: "(open "&str)
     parser.processTokenStream()
     if ($parser.tokens[1]).startsWith("str"):
       return ($parser.tokens[1])[4..^2]
@@ -356,16 +357,20 @@ suite "Structuralization":
     univ.add: newDoc ID":span": title "span"; vocabFor ":h1"; vocabFor ":body"
     univ.add: newDoc ID":dup1": title "dup"; vocabFor ":body"; vocabFor ":body"
     univ.add: newDoc ID":dup2": title "dup"; title "dup2"; vocabFor ":body"; vocabFor ":body"
-    proc structure(str: string): string =
-      var parser = ParseState(input: str, vocab: univ.getFullVocabulary())
+    proc structure(strs: varargs[string]): string =
+      var parser = ParseState(vocab: univ.getFullVocabulary())
+      for str in strs:
+        parser.inputs.add ParseInput(name: "test input", content: str)
       parser.processTokenStream()
       parser.structuralize(ID":top")
       case parser:
       of Ok(tokens: @tokens): return tokens.mapIt($it).join(" ")
       of Fail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
+      of StructuralizeFail(loc: @loc, message: @msg): return fmt "{loc}: {msg}"
     proc parseAnnot(str: string): string =
       let vocab = univ.getFullVocabulary()
-      var parser = ParseState(input: str, vocab: vocab)
+      var parser = ParseState(vocab: vocab)
+      parser.inputs.add ParseInput(name: "test input", content: str)
       parser.parse()
       case parser:
       of Ok(results: @results):
@@ -425,6 +430,13 @@ suite "Structuralization":
         "16: Couldn't unambiguously resolve symbol author inside :author"
       structure("head author \"Foo\" head author \"Bar\" author \"Baz\" head head")==
         "pushi(:doc) pushi(:head) pushi(:author) str(Foo) popi popi pushi(:head) pushi(:author) str(Bar) popi pushi(:author) str(Baz) popi popi pushi(:head) popi pushi(:head) popi popi"
+  test "Structuralization stress tests":
+    check:
+      structure("\"juice\"")=="0: Expressions can't start with a string literal."
+      structure("(\"juice\"")=="0: Failed to parse"
+      structure("(head) \"juice\"")=="7: String literal cannot follow )."
+      structure("(head \"juice\" \"morejuice\")")=="pushi(:doc) push(:head) str(juice) popi pushi(:head) str(morejuice) pop popi"
+      structure("(head (author \"juice\") \"morejuice\")")=="23: String literal cannot follow )."
 
   test "Friendly representations":
     check:
@@ -444,6 +456,12 @@ suite "Structuralization":
       parseAnnot("(doc \"Hello\") (doc \"World\")")==
        "(doc \"Hello\"), (doc \"World\")"
 
+  test "Multi-source parsing":
+    check:
+      structure("(head", "author \"kimmy\"", ")") == "pushi(:doc) push(:head) pushi(:author) str(kimmy) popi pop popi"
+      structure("(head", "author \"kimmy\"", "))") == "20: Unbalanced parentheses: ')' without a '('"
+      structure("(head)", "author \"kimmy\"") == "pushi(:doc) push(:head) pop pushi(:head) pushi(:author) str(kimmy) popi popi popi"
+      structure("(head", "author \"kimmy\")") == "fails"
 
 suite "Sqlite library":
   setup:

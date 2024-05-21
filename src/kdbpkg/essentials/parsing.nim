@@ -50,10 +50,13 @@ type
     dtkStrLitIncomplete
   DexprToken* = object
     kind*: DexprTokenKind
-    loc*: int
+    inputNum*: int # which input (0-indexed)
+    loc*: int # byte position in input
     symbol*: string
     value*: string
     rawStrLitSkipLen*: int
+    failing* = false
+    inferredFromImplicitResolution* = false
   TokenParseState* = object
     strLen*: int
     s*: seq[DexprToken]
@@ -68,17 +71,36 @@ proc `$`*(dt: DexprToken): string =
   of dtkStrLitIncomplete: fmt"stri({dt.value})"
 
 proc withSym(tok: DexprToken, id: string): DexprToken =
-  DexprToken(kind: tok.kind, loc: tok.loc, symbol: id, value: tok.value)
+  result = tok
+  result.symbol = id
 proc withKind(tok: DexprToken, kind: DexprTokenKind): DexprToken =
-  DexprToken(kind: kind, loc: tok.loc, symbol: tok.symbol, value: tok.value)
+  result = tok
+  result.kind = kind
+proc withOffset(tok: DexprToken, offs: int): DexprToken =
+  result = tok
+  result.loc += offs
+proc withImplicit(tok: DexprToken): DexprToken =
+  result = tok
+  result.inferredFromImplicitResolution = true
 
 
 type
+  ParseInput* = object
+    name*: string
+    content*: string
+    contextGuarded* = false
   ParseResultStatus* = enum
     parseOk, ## Parse is valid, but incomplete so far.
-    parseFail
+    parseFail,
+    parseStructuralizeFail,
   ParseState* = object
-    input*: string
+    inputs*: seq[ParseInput]
+    ## multiple source parsing: for example, the CLI
+    ## supports some files coming as options, some as
+    ## stdin. This supports splicing them.
+    ## Note: implicit resolution cannot occur between
+    ## source boundaries, to prevent sources from
+    ## breaking out.
     vocab*: Vocabulary
     tokens*: seq[DexprToken]
     results*: seq[Expr]
@@ -92,13 +114,26 @@ type
     unprocessed*: seq[DexprToken]
     failingToken*: DexprToken
 
-proc setFail(ps: var ParseState, loc: int, message: string, processed: seq[DexprToken], unprocessed: seq[DexprToken], failingToken: DexprToken) =
-  ps.kind = parseFail
-  ps.loc = loc
+proc setFail(ps: var ParseState, message: string, processed: seq[DexprToken], unprocessed: seq[DexprToken], failingToken: DexprToken, kind = parseFail) =
+  ps.kind = kind
+  ps.loc = failingToken.loc
   ps.message = message
   ps.processed = processed
   ps.unprocessed = unprocessed
   ps.failingToken = failingToken
+  ps.failingToken.failing = true
+
+proc locToInputDesc*(ps: ParseState, loc: int): tuple[name: string, line: int, col: int] =
+  var loc = loc
+  for input in ps.inputs:
+    if loc > input.content.len:
+      loc = loc - input.content.len
+    else:
+      for lineNo, line in input.content.split("\n").pairs():
+        if loc > line.len:
+          loc = loc - line.len - 1
+        else:
+          return (name: input.name, line: lineNo, col: loc)
 
 
 let tokenPegParser = peg("toplevel", ps: TokenParseState):
@@ -149,27 +184,37 @@ let tokenPegParser = peg("toplevel", ps: TokenParseState):
     # skip over the R and the two spaces
   rawEscape <- >rawEscapeStart:
     ps.s[^1].value.add ($1).substr ps.s[^1].rawStrLitSkipLen
+  # TODO: i should ABSOLUTELY make this my own string
+  # rather than implementing \R ... something like
+  # (expr !!string 40 ...forty bytes follows...)
 
   # Identifiers
   # Note: Keep this is sync with repr/titleCanParse
   reflink <- +{'0'..'9', 'a'..'z', 'A'..'Z', '-', '_', ':', '!', '?', '/', '~', '%', '$', '@'}
-  toplevel <- +(sexp_open * *strlit |
-                mexp_open * *strlit |
-                bare_dexpr * *strlit |
+  toplevel <- +(sexp_open |
+                mexp_open |
+                bare_dexpr |
+                strlit |
                 close) * !1
 
 # for testing
 proc processTokenStream*(p: var ParseState) =
-  var tps = TokenParseState(strLen: p.input.len)
-  if p.input.len > 0:
-    let matches = tokenPegParser.match(p.input, tps)
-    p.tokens = tps.s
-    if not matches.ok:
-      p.kind = parseFail
-      p.loc = matches.matchMax-1
-      p.message = "Failed to parse"
+  var accumulatedLoc = 0
+  for source in p.inputs:
+    if source.content.len > 0:
+      var tps = TokenParseState(strLen: source.content.len)
+      let matches = tokenPegParser.match(source.content, tps)
+      for nextTok in tps.s:
+        p.tokens.add nextTok.withOffset(accumulatedLoc)
+      if matches.ok:
+        accumulatedLoc += source.content.len
+      else:
+        p.kind = parseFail
+        p.loc = accumulatedLoc + matches.matchMax-1
+        p.message = "Failed to parse"
+        break
 
-# A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indivate vocab backtracking.
+# A structuralized stream only contains pushContext, popContext, strLit, and pushImplicitContext to indicate vocab backtracking.
 # All pushes and pops are guaranteed to
 # be balanced* and all string
 # literals immediately follow pushContexts.
@@ -186,7 +231,7 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
     var tok = unresolvedStream.popFirst()
 
     template fail(message: string): untyped =
-      ps.setFail(tok.loc, fmt(message), processed=resolved.toSeq, unprocessed=unresolvedstream.toSeq, failingToken=tok)
+      ps.setFail(fmt(message), processed=resolved.toSeq, unprocessed=unresolvedstream.toSeq, failingToken=tok, kind=parseStructuralizeFail)
       return
 
     when false:
@@ -204,7 +249,7 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
         for newCtx in path[0..^2]:
           contexts.add (key: newCtx.key, isExplicit: false)
           resolved.addLast DexprToken(kind: dtkPushNewContextImplicitly,
-              loc: tok.loc, symbol: $newCtx.key)
+              loc: tok.loc, symbol: $newCtx.key, inferredFromImplicitResolution:true)
         resolved.addLast tok.withSym $path[^1].key
         contexts.add (key: path[^1].key, isExplicit: tok.kind == dtkPushNewContext)
       else:
@@ -257,14 +302,20 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
         unresolvedStream.addFirst tok
         unresolvedStream.addFirst DexprToken(kind: dtkPopContextImplicitly, loc: tok.loc)
 
-    of dtkStrLit, dtkStrLitIncomplete:
-      if resolved[^1].kind notin {dtkPushNewContext, dtkPushNewContextImplicitly}:
+    of dtkStrLitIncomplete:
+      fail "Unterminated string literal."
+    of dtkStrLit:
+      if resolved.len == 0:
+        fail "Expressions can't start with a string literal."
+      if resolved[^1].kind in {dtkPushNewContext, dtkPushNewContextImplicitly}:
+        resolved.addLast tok
+      elif resolved[^1].kind in {dtkPopContext, dtkPopContextImplicitly}:
+        fail "String literal cannot follow )."
+      else:
         resolved.addLast(DexprToken(kind: dtkPopContextImplicitly, loc: tok.loc))
         resolved.addLast(DexprToken(kind: dtkPushNewContextImplicitly,
             symbol: $contexts[^1].key, loc: tok.loc))
-      if tok.kind == dtkStrLitIncomplete:
-        fail "Unterminated string literal."
-      resolved.addLast tok
+        resolved.addLast tok
 
   ps.incompleteContexts = contexts
   while contexts.len > 1:
@@ -284,7 +335,7 @@ proc processExprs*(ps: var ParseState) =
     while unresolvedStream.len > 0:
       var tok = unresolvedStream.popFirst()
       template fail(message: string): untyped =
-        ps.setFail(tok.loc, fmt(message), processed = processed, unprocessed = unresolvedStream.toSeq, failingToken=tok)
+        ps.setFail(fmt(message), processed = processed, unprocessed = unresolvedStream.toSeq, failingToken=tok)
         return
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
