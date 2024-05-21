@@ -9,6 +9,7 @@ import unicode
 import strutils
 import seqUtils
 import deques
+import json
 {.experimental: "caseStmtMacros".}
 
 ## Parsing happens in two stages:
@@ -68,6 +69,8 @@ proc `$`*(dt: DexprToken): string =
 
 proc withSym(tok: DexprToken, id: string): DexprToken =
   DexprToken(kind: tok.kind, loc: tok.loc, symbol: id, value: tok.value)
+proc withKind(tok: DexprToken, kind: DexprTokenKind): DexprToken =
+  DexprToken(kind: kind, loc: tok.loc, symbol: tok.symbol, value: tok.value)
 
 
 type
@@ -86,12 +89,16 @@ type
     message*: string
     loc*: int
     processed*: seq[DexprToken]
+    unprocessed*: seq[DexprToken]
+    failingToken*: DexprToken
 
-proc setFail(ps: var ParseState, loc: int, message: string, processed: seq[DexprToken]) =
+proc setFail(ps: var ParseState, loc: int, message: string, processed: seq[DexprToken], unprocessed: seq[DexprToken], failingToken: DexprToken) =
   ps.kind = parseFail
   ps.loc = loc
   ps.message = message
   ps.processed = processed
+  ps.unprocessed = unprocessed
+  ps.failingToken = failingToken
 
 
 let tokenPegParser = peg("toplevel", ps: TokenParseState):
@@ -179,7 +186,7 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
     var tok = unresolvedStream.popFirst()
 
     template fail(message: string): untyped =
-      ps.setFail(tok.loc, fmt(message), processed = resolved.toSeq)
+      ps.setFail(tok.loc, fmt(message), processed=resolved.toSeq, unprocessed=unresolvedstream.toSeq, failingToken=tok)
       return
 
     when false:
@@ -211,26 +218,30 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
       # with an explicit ')', so this should jump out of all
       # of our implicit contexts too.
       let (_, wasExplicit) = contexts.pop()
-      resolved.addLast tok
-      if not wasExplicit:
-        # Backtracking until the last explicit context
-        unresolvedStream.addFirst tok
       if contexts.len == 0:
         fail "Unbalanced parentheses: ')' without a '('"
+      if wasExplicit:
+        resolved.addLast tok
+      else:
+        resolved.addLast tok.withKind(dtkPopContextImplicitly)
+        # Backtracking until the last explicit context
+        unresolvedStream.addFirst tok
 
     of dtkPopContextImplicitly:
-      resolved.addLast tok
       if len(contexts) == 1:
         if len(unresolvedStream) > 0:
           # might have a better error message for ye
-          fail "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol}"
+          tok = unresolvedstream.popFirst() # for better error messages
+          fail "Couldn't unambiguously resolve symbol {tok.symbol}"
         fail "Tried to break out of the only context."
       let (ctxId, wasExplicit) = contexts.pop()
       if wasExplicit:
         if len(unresolvedStream) > 0:
           # might have a better error message for ye
-          fail "Couldn't unambiguously resolve symbol {unresolvedStream[0].symbol} inside {ctxId}"
+          tok = unresolvedstream.popFirst() # for better error messages
+          fail "Couldn't unambiguously resolve symbol {tok.symbol} inside {ctxId}"
         fail "Tried to implicitly pop out of an explicit context."
+      resolved.addLast tok
 
     of dtkBareExp:
       if Some(@path) ?= ps.vocab.resolve(tok.symbol, contexts[^1].key):
@@ -247,13 +258,13 @@ proc structuralize*(ps: var ParseState, context = ID":top") =
         unresolvedStream.addFirst DexprToken(kind: dtkPopContextImplicitly, loc: tok.loc)
 
     of dtkStrLit, dtkStrLitIncomplete:
-      if resolved[^1].kind == dtkPushNewContext or resolved[^1].kind == dtkPushNewContextImplicitly:
-        resolved.addLast tok
-      else:
+      if resolved[^1].kind notin {dtkPushNewContext, dtkPushNewContextImplicitly}:
         resolved.addLast(DexprToken(kind: dtkPopContextImplicitly, loc: tok.loc))
         resolved.addLast(DexprToken(kind: dtkPushNewContextImplicitly,
             symbol: $contexts[^1].key, loc: tok.loc))
-        resolved.addLast tok
+      if tok.kind == dtkStrLitIncomplete:
+        fail "Unterminated string literal."
+      resolved.addLast tok
 
   ps.incompleteContexts = contexts
   while contexts.len > 1:
@@ -268,11 +279,12 @@ proc processExprs*(ps: var ParseState) =
   ## and save them in ParseState
   var stack: seq[Expr] = @[Expr()]
   var processed: seq[DexprToken]
+  var unresolvedStream = ps.tokens.toDeque
   if ps.kind == parseOk:
-    for tok in ps.tokens:
-      processed.add tok
+    while unresolvedStream.len > 0:
+      var tok = unresolvedStream.popFirst()
       template fail(message: string): untyped =
-        ps.setFail(tok.loc, fmt(message), processed = processed)
+        ps.setFail(tok.loc, fmt(message), processed = processed, unprocessed = unresolvedStream.toSeq, failingToken=tok)
         return
       case tok:
       of PushNewContext(), PushNewContextImplicitly():
@@ -286,6 +298,7 @@ proc processExprs*(ps: var ParseState) =
         stack[^2].children.add stack.pop
       of StrLit(), StrLitIncomplete():
         stack[^1].val = tok.value
+      processed.add tok
     ps.results = stack[0].children
 
 
