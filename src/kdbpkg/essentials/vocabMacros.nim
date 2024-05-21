@@ -62,6 +62,7 @@ proc defBuiltinVocabImpl*(body: NimNode, vocabFor: Option[string]=some ":top", u
                     for doc in childKeys:
                         subexpr.add macroBodyToExpr(quote do: vocabHas `doc`)
             resultStmts.add quote do:
+                doAssert(ID(`key`) notin builtins)
                 let `ident`* = builtins.add `subexpr`
         of (nnkIdent, @sym):
             # Reuse some previously-defined doc as vocab child
