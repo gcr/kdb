@@ -28,20 +28,23 @@ defTopDownBuiltinVocab:
             summary="A fragment of some human-readable written text document.":
         para ":3BEuP",
                 title="para",
+                title="paragraph",
                 summary="Block paragraph containing consecutive inline text.":
             span ":G2ENB",
                     title="span",
-                    summary="Single span of text.":
-                spanEmph ":ywTCh", title="emph", title="italic"
-                spanBold ":uwPko", title="strong", title="bold"
-                spanUnderline ":LuGdV", title="underline"
-                spanFootnote ":KN4YM", title="footnote"
-                spanHighlight ":qnuQP", title="highlight"
-                spanStrike ":d5xJG", title="strikethrough"
-                spanSuperscript ":3qoSg", title="superscript"
-                spanSubscript ":h5ese", title="Subscript"
-                spanMath ":MUu2a", title="math", summary="Inline math in LaTeX format"
-                spanTt ":rL2gp", title="tt", title="verbose", summary="Inline monotype"
+                    summary="Single span of text."
+            spanEmph ":ywTCh", title="emph", title="italic"
+            spanBold ":uwPko", title="strong", title="bold"
+            spanUnderline ":LuGdV", title="underline"
+            spanFootnote ":KN4YM", title="footnote"
+            spanHighlight ":qnuQP", title="highlight"
+            spanStrike ":d5xJG", title="strikethrough"
+            spanSuperscript ":3qoSg", title="superscript"
+            spanSubscript ":h5ese", title="Subscript"
+            spanMath ":MUu2a", title="math", summary="Inline math in LaTeX format"
+            spanTt ":rL2gp", title="tt", title="verbose", summary="Inline monotype"
+            inlineLink ":bQdf4", title="link", summary="Inline link":
+                inlineLinkUrl ":aPPD1", title="href", title="url", summary="Link pointing to URL"
 
         blockMath ":3ytYo",
             title="block-math", title="display-math",
@@ -56,6 +59,7 @@ defTopDownBuiltinVocab:
                 title="head",
                 title="h1",
                 summary="Section header":
+            span
             depth ":oiVwK",
                 title="depth",
                 summary="Numeric depth of this section heading. Textual documents are represented in a completely flat way, so indicating heading depth explicitly allows us to interpret structure."
@@ -63,29 +67,33 @@ defTopDownBuiltinVocab:
                 title="todo-keyword",
                 title="status",
                 summary="Adds an org-mode style TODO keyword to this section."
-        orderedList ":kzH8E",
-                    title="ordered-list",
-                    title="ol",
-                    summary="A numerically ordered list, like 1, 2, etc.":
-            listItem ":XN2jJ",
-                title="li",
-                title="list-item",
-                summary="Item of an ordered or unordered list":
-                    para
-        unorderedList ":aoJqj",
-            title="unordered-list",
-            title="ul",
-            summary "A bulleted list.":
-                listItem
-        taskList ":V57gF",
-            title="unordered-list",
-            title="ul",
-            summary="A bulleted list.":
-                listItem
+        list ":kzH8E",
+            title="list",
+            summary="A textual list of items.":
+            unorderedListItem ":XN2jJ",
+                    title="li",
+                    title="list-item",
+                    summary="Item of an unordered list":
+                para
+                list
+            orderedListItem ":2GkWS",
+                    title="oli",
+                    title="numbered-list-item",
+                    summary="Item of an ordered list":
+                para
+                list
+            taskItem ":V57gF",
+                    title="task-item",
+                    title="task",
+                    title="ti",
+                    summary="A task item.":
+                para
+                list
                 listItemChecked ":bU6gD",
-                    title="checked",
-                    summary="Indicate that this task is complete. Used in task-list.":
-                        para
+                        title="checked",
+                        summary="Indicate that this task is complete."
+
+        planning ":lF0yx", title="block-timestamp", summary="Block-level timestamp"
 
         textualTable ":Wqs7n", title="table", summary="Block table.":
             tabRow ":48Lqx", title="table-row", title="tr", summary="Table row.":
