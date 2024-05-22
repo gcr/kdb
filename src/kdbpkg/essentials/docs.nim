@@ -282,11 +282,6 @@ let
         vocabFor ":top"
         title "vocab-explicit-only"
         summary "Prevents implicit structuralization from expanding into this vocab."
-    vocabSameAs* = defBuiltinDoc ID":W4hyz":
-        vocabFor ":top"
-        title "vocab-same-as"
-        title "vocab-alias"
-        summary "Inherits vocab from the indicated doc. Any vocab for that doc can also appear under this one."
 
 # Basic ops
 # IMPORTANT: We never want to call a / b when b is an Expr.

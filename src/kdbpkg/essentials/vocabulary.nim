@@ -26,24 +26,33 @@ proc `$`*(vocab: Vocabulary): string =
   ## for debugging
   for k, vals in vocab.pairs:
     result &= fmt"- {$k} "
+    if Some(@doc) ?= vals.doc:
+      let titles = doc.allTitles.toSeq.join(",")
+      result &= fmt"({titles}) "
     for val in vals.children:
       result &= val.allTitles.toSeq.join(",") #& ":" & $val.key
       result &= " "
     result &= "\n"
 
-proc following*(vocab: Vocabulary, id: ID, cycleBreak: seq[ID] = @[]): HashSet[Doc] =
+proc following*(vocab: Vocabulary, id: ID, allowTopLoop=true): HashSet[Doc] =
   ## Return all vocab that could be directly resolved under id.
   ## Handles `vocab-same-as` properly.
   if id in vocab:
     for child in vocab[id].children:
-      result.incl child
+      if child.key != topDoc.key:
+        result.incl child
     if Some(@doc) ?= vocab[id].doc:
-      # Handle vocab-same-as
-      for sameVocab in doc / vocabSameAs:
-        if Some(@sameVocabId) ?= sameVocab.val.toID:
-          if sameVocabId notin cycleBreak:
-            for child in vocab.following(sameVocabId, cycleBreak & @[sameVocabId]):
-              result.incl child
+      # As a special case, treat vocabHas :top as a way of
+      # making all top-level vocab available for direct
+      # resolution. This was previously supported as a
+      # vocabSameAs expression, but I don't like that.
+      if doc.hasEqual(vocabHas, $topDoc.key) and allowTopLoop:
+        echo "OH SHIIIIIIIIT"
+        for child in vocab.following(topDoc.key):
+          # top shouldn't contain itself, so hopefully no infinite recursion
+          result.incl child
+      elif doc.hasEqual(vocabHas, $topDoc.key):
+        echo "No recursion -- indirect resolution only"
 
 proc indirectlyFollowing*(vocab: Vocabulary, context: ID): Table[Doc, seq[Doc]] =
   ## List all docs that could possibly appear in `context`'s vocabulary.
@@ -53,13 +62,13 @@ proc indirectlyFollowing*(vocab: Vocabulary, context: ID): Table[Doc, seq[Doc]] 
   var stack: seq[(Doc, seq[Doc])]
   # quick DFS to accumulate possibilities
   if context in vocab:
-      for nextVocab in vocab.following context:
+      for nextVocab in vocab.following(context, allowTopLoop=false):
           stack.add (nextVocab, @[nextVocab])
       while stack.len > 0:
           let (last, path) = stack.pop()
           result[last] = path
-          if not last.has vocabExplicitOnly:
-            for nextVocab in vocab.following last.key:
+          if not last.has(vocabExplicitOnly):
+            for nextVocab in vocab.following(last.key, allowTopLoop=false):
                 if nextVocab notin result:
                       stack.add (nextVocab, concat(path, @[nextVocab]))
                 else:

@@ -221,7 +221,7 @@ suite "Ref resolution":
       title "A descendant of head"
     univ.add: newDoc ID":someDup5":
       title "Vocab-same-as testing"
-      vocabSameAs ":uuidHead"
+      vocabHas ":top"
       vocabHas ":dd"
     proc testResolveIndirectly(vocab: Vocabulary, title: string, context: ID): Option[seq[ID]] =
       if Some(@path) ?= vocab.resolveIndirectly(title, context):
@@ -315,16 +315,13 @@ suite "Ref resolution":
       vocab.resolveDirectly("NoMatch", context=ID":top").isNone
       vocab.resolveDirectly("Title", context=ID":uuidHead").key == some ID":titleButInsideHead"
       vocab.resolveDirectly("Title", context=ID":top").key == some title.key
+    echo $vocab
+    check:
       vocab.resolveDirectly("recurse", context=ID":uuidHead").key == some ID":meh-meh"
       # this is the kicker: don't structuralize past Top
       # otherwise this might resolve to
       # head->recurse->top->doc->head->recurse...
-      vocab.resolveIndirectly("Doc", context=ID":uuidHead").isNone
-
-  test "Vocab-same-as resolution":
-    let vocab = univ.getFullVocabulary()
-    check:
-      vocab.resolveDirectly("category", context=ID":someDup5").key == some ID":category"
+      vocab.testResolveIndirectly("Doc", context=ID":uuidHead").isNone
       vocab.resolveDirectly("Doc", context=ID":someDup5").key == some ID":dd"
 
   test "Explicit-only vocab should inhibit indirect resolution.":
@@ -461,7 +458,7 @@ suite "Structuralization":
       structure("(head", "author \"kimmy\"", ")") == "pushi(:doc) push(:head) pushi(:author) str(kimmy) popi pop popi"
       structure("(head", "author \"kimmy\"", "))") == "20: Unbalanced parentheses: ')' without a '('"
       structure("(head)", "author \"kimmy\"") == "pushi(:doc) push(:head) pop pushi(:head) pushi(:author) str(kimmy) popi popi popi"
-      structure("(head", "author \"kimmy\")") == "fails"
+      structure("(head", "author \"kimmy\")") == "should fail once i have structure guards in place"
 
 suite "Sqlite library":
   setup:
@@ -481,8 +478,8 @@ suite "Sqlite library":
     check newDoc.key == some ID":something"
     check newDoc.get().allTitles.toSeq == @["Foooo"]
 
-  test "Broken vocab":
-    check: "TODO: please add tests to ensure broken vocab's handled properly" == ""
+  test "TODO: add tests for broken vocab":
+    check false
   #test "Should never add broken vocab":
   #  expect ValueError:
   #    lib.add: newDoc ID":broken": title "Broken"; vocabFor "nope"
