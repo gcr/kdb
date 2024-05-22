@@ -458,7 +458,6 @@ suite "Structuralization":
       structure("(head", "author \"kimmy\"", ")") == "pushi(:doc) push(:head) pushi(:author) str(kimmy) popi pop popi"
       structure("(head", "author \"kimmy\"", "))") == "20: Unbalanced parentheses: ')' without a '('"
       structure("(head)", "author \"kimmy\"") == "pushi(:doc) push(:head) pop pushi(:head) pushi(:author) str(kimmy) popi popi popi"
-      structure("(head", "author \"kimmy\")") == "should fail once i have structure guards in place"
 
 suite "Sqlite library":
   setup:
@@ -478,9 +477,7 @@ suite "Sqlite library":
     check newDoc.key == some ID":something"
     check newDoc.get().allTitles.toSeq == @["Foooo"]
 
-  test "TODO: add tests for broken vocab":
-    check false
-  #test "Should never add broken vocab":
-  #  expect ValueError:
-  #    lib.add: newDoc ID":broken": title "Broken"; vocabFor "nope"
-  #  check lib.lookup(ID":broken").isNone
+  test "Broken vocab":
+    lib.add: newDoc ID":broken": title "Broken"; vocabFor "nope"
+    check lib.lookup(ID":broken").isSome
+    check lib.lookup(title.key).isSome

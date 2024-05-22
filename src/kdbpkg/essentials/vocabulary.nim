@@ -90,16 +90,16 @@ method getFullVocabulary*(library: Library): Vocabulary {.base.} =
     ensureExists d
     result[k].children.incl d
 
-  ## Docs with (vocab-for ":something") can nest inside :something
-  ## expressions
+  ## Docs with (vocab-for ":something") can nest inside (:something ...)
+  ## expressions.
   for nextDoc in library.searchFor vocabFor.key:
     for prev in nextDoc / vocabFor:
       if Some(@id) ?= prev.val.toId:
         addVocab(id, nextDoc)
 
-  ## Docs with (vocab-has ":something") can contain :something
-  ## expressions. Typically these also need to be "vocab for"
-  ## some other node to be resolved anywhere.
+  ## Docs with (vocab-has ":something") can contain (:something ..)
+  ## expressions. That turns :something into vocab for the doc we're
+  ## considering.
   for prevDoc in library.searchFor vocabHas.key:
     for next in prevDoc / vocabHas:
       if Some(@nextId) ?= next.val.toId:

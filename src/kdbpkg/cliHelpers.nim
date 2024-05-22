@@ -152,7 +152,7 @@ proc parseCliOptions*(opts: seq[string], lib: Library, vocab: Vocabulary, rootCo
   var usedStdin = false
   while opts.len > 0:
     let nextTok = opts.popFirst()
-    case nextTok.toLowerAscii():
+    case nextTok:
     of "-n", "--dry-run":
       result.options.dryRun = true
     of "-s", "--str":
@@ -161,12 +161,12 @@ proc parseCliOptions*(opts: seq[string], lib: Library, vocab: Vocabulary, rootCo
     of "-S", "--stdin":
       if usedStdin:
         raise newException(ValueError, "cannot have more than one --stdin")
-      tokens.add(stdin.readAll())
+      tokens.add($ %*stdin.readAll())
       usedStdin = true
-    of "-i", "--from-file":
-      let filename = opts.popFirst()
-      var strm = openFileStream(filename)
-      tokens.add(strm.readAll())
+    #of "-i", "--from-file":
+    #  let filename = opts.popFirst()
+    #  var strm = openFileStream(filename)
+    #  tokens.add(strm.readAll())
     of "-r", "--human-readable":
       result.options.humanReadableOutput = false
     else:
