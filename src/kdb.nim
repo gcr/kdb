@@ -1,3 +1,6 @@
+# kdb (c) 2024 Kimberly Wilber.
+# kdb is distributed under a license that expressly prohibits military use. See "LICENSE" in this repository for details.
+
 import kdbpkg/essentials/[docs, vocabulary, repr, vocabMacros]
 import kdbpkg/libraries/sqliteLibrary
 import kdbpkg/builtins/textual
