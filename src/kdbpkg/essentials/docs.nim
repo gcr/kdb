@@ -166,18 +166,19 @@ iterator allBuiltins*(): Doc =
     for doc in builtins.docs.values:
         yield doc
 
-## Macros for making docs and exprs
-proc makeExpr(key: ID, val: string, items: varargs[Expr] = []): Expr =
+## Macros for making docs and exprs. Sugar for nim code.
+proc makeExpr(key: ID, val: string, items: openarray[Expr] = []): Expr =
     Expr(kind: key, val: val, children: items.toSeq)
-proc makeExpr(key: ID, val: Doc, items: varargs[Expr] = []): Expr =
+proc makeExpr(key: ID, val: Doc, items: openarray[Expr] = []): Expr =
     Expr(kind: key, val: $val.key, children: items.toSeq)
-proc makeExpr(key: ID, items: varargs[Expr] = []): Expr =
+proc makeExpr(key: ID, items: openarray[Expr] = []): Expr =
     Expr(kind: key, val: "", children: items.toSeq)
-proc makeExpr(doc: Doc, val: string, items: varargs[Expr] = []): Expr =
+proc makeExpr(doc: Doc, val: string, items: openarray[Expr] = []): Expr =
     Expr(kind: doc.key, val: val, children: items.toSeq)
-proc makeExpr(doc: Doc, val: Doc, items: varargs[Expr] = []): Expr =
+proc makeExpr(doc: Doc, val: Doc, items: openarray[Expr] = []): Expr =
+    # useful for vocab-like items. Imagine makeExpr(vocabHas, topDoc)
     Expr(kind: doc.key, val: $val.key, children: items.toSeq)
-proc makeExpr(doc: Doc, items: varargs[Expr] = []): Expr =
+proc makeExpr(doc: Doc, items: openarray[Expr] = []): Expr =
     Expr(kind: doc.key, val: "", children: items.toSeq)
 proc macroBodyToExpr*(body: NimNode): seq[NimNode] {.compileTime.} =
     case (body.kind, body):
