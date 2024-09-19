@@ -8,6 +8,31 @@ import hashes
 import sets
 {.experimental: "caseStmtMacros".}
 
+## "Resolution" is the process by which
+## unstructuralized expressions like
+##     textual span "Hello" bold "World"
+## is structuralized into
+##   (textual:cjYuE (para:3BEuP
+##                      (span:G2ENB "Hello")
+##                      (span:G2ENB (bold:uwPko "World"))))
+## with the help of the current database's vocabulary.
+## This goes hand-in-hand with parsing.
+##
+## Structuralization typically happens at serialization
+## boundaries and is generally intended only for user-written
+## expressions. It's purely a data-entry / keystroke saving
+## measure.
+##
+## Structuralization is unambiguous, but may depend on
+## the current database's user-defined vocabulary.
+## We don't tolerate ambiguous structuralizations.
+## Because underspecified expressions can cause
+## structuralization to fail, other programs that
+## write into the database should almost always
+## use explicit IDs. To aid human-readability, programs may
+## use the fully-qualified `human-readable-title:ID` form
+## for IDs.
+
 type TitleId* = object
     title*: string
     id*: ID
@@ -107,12 +132,28 @@ const MATCH_METHODS = [
 proc resolveDirectly*(vocab: Vocabulary, title: string, context: ID): Option[Doc] =
     ## Directly resolves `title` from the context's immediate vocab.
     ## If direct resolution isn't possible, returns none.
+    ##
+    ## Direct resolution considers only the set of Docs that directly follow `context`
+    ## in the vocabulary, resolving to the first of:
+    ## - the single Doc that matches the given UUID, otherwise
+    ## - the single Doc with an exactly matching title, otherwise
+    ## - the single Doc with a case-insensitively matching title, otherwise
+    ## - the single Doc whose title contains the given title as a substring, otherwise
+    ## - the single Doc whose title contains at least all of the letters of the given title in the order given, otherwise
+    ## - direct resolution fails.
+    ##
+    ## If any of these sets match multiple Docs, direct resolution fails.
     for mm in MATCH_METHODS:
         if context in vocab:
             if Some(@vocabRule) ?= vocab.following(context).onlyOneMatch(title, mm):
                 return some vocabRule
 
 proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
+    ## Indirect resolution is like direct resolution (see `resolveDirectly`), but
+    ## it instead considers the set of every Doc that indirectly
+    ## follows `context` in the vocabulary.
+    ## This is more lenient, and may result in nested expressions to be
+    ## structuralized into the given context.
     let pathsForFollowing = vocab.indirectlyFollowing(context)
     var following: HashSet[Doc]
     for k in pathsForFollowing.keys: following.incl k
@@ -122,6 +163,10 @@ proc resolveIndirectly*(vocab: Vocabulary, title: string, context: ID): Option[s
     return none(seq[Doc])
 
 proc resolve*(vocab: Vocabulary, title: string, context: ID): Option[seq[Doc]] =
+    ## The given title is resolved to the first node path that:
+    ## - resolves to the title directly following `context` in the vocabulary, or
+    ## - resolves to the title indirectly following `context` in the vocabulary.
+    ## If neither resolves unambiguously (i.e. no Docs match the title or more than one Doc could match the title), resolution fails.
     if Some(@doc) ?= resolveDirectly(vocab, title, context):
         return some @[doc]
     if Some(@path) ?= resolveIndirectly(vocab, title, context):

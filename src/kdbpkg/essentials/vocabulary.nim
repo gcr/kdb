@@ -42,12 +42,12 @@ proc following*(vocab: Vocabulary, id: ID, allowTopLoop=true): HashSet[Doc] =
       if child.key != topDoc.key:
         result.incl child
     if Some(@doc) ?= vocab[id].doc:
-      # As a special case, treat vocabHas :top as a way of
+      # As a special case, treat (vocabHas ":top") as a way of
       # making all top-level vocab available for direct
       # resolution. This was previously supported as a
       # vocabSameAs expression, but I don't like that.
       if doc.hasEqual(vocabHas, $topDoc.key) and allowTopLoop:
-        echo "OH SHIIIIIIIIT"
+        echo "Yes recursion -- allowing indirect resolution"
         for child in vocab.following(topDoc.key):
           # top shouldn't contain itself, so hopefully no infinite recursion
           result.incl child

@@ -12,9 +12,12 @@ import std/paths
 
 suite "Nim syntax smoketests":
   test "Doc syntax":
-    # this doesn't validate, but it's an example
+    # tests for nim macros
+    # these need to be rock solid, otherwise i can't even guarantee
+    # that the nim source code is being read correctly
     let base = newDoc ID":abcd":
       title "Hello"
+      # this doesn't validate, but it's an example
       vocabFor(vocabHas("abcd", title("defg")))
     let base2 = newDoc(ID":abcd", title("Hello"), vocabFor(vocabHas("abcd", title("defg"))))
     check $base == $base2
@@ -49,7 +52,7 @@ suite "Bulit-in refs":
     let titles = docs.mapIt(it.firstTitle)
     check titles == @[some "vocab-for", some "title", some "summary"]
 
-  test "Multiple children":
+  test "Multiple titles and children":
     let x = newDoc ID":multichild":
       title "one"
       title "two"
@@ -92,7 +95,7 @@ suite "Bulit-in refs":
       @["something"] == x.allTitles.toSeq
       not title.has(x)
 
-suite "Dexpr parsing":
+suite "Expr parsing":
   proc tokenize(input: string): string =
     var parser = ParseState()
     parser.inputs.add ParseInput(name: "test input", content: input)
@@ -100,7 +103,7 @@ suite "Dexpr parsing":
     let tokens = parser.tokens.mapIt($it)
     return tokens.join(" ")
 
-  test "Parse streams":
+  test "Token streams":
     check:
       tokenize("abc def ghi")==
          "bare(abc) bare(def) bare(ghi)"
@@ -318,9 +321,10 @@ suite "Ref resolution":
     echo $vocab
     check:
       vocab.resolveDirectly("recurse", context=ID":uuidHead").key == some ID":meh-meh"
-      # this is the kicker: don't structuralize past Top
+      # this is the kicker: don't indirectly structuralize past Top
       # otherwise this might resolve to
       # head->recurse->top->doc->head->recurse...
+      # however, we should be able to directly structuralize past Top.
       vocab.testResolveIndirectly("Doc", context=ID":uuidHead").isNone
       vocab.resolveDirectly("Doc", context=ID":someDup5").key == some ID":dd"
 

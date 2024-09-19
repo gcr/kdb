@@ -75,20 +75,21 @@ defTopDownBuiltinVocab:
                     title="list-item",
                     summary="Item of an unordered list":
                 para
-                list
+                ID":kzH8E" # nested list
             orderedListItem ":2GkWS",
                     title="oli",
                     title="numbered-list-item",
                     summary="Item of an ordered list":
                 para
-                list
+                ID":kzH8E" # nested list
             taskItem ":V57gF",
                     title="task-item",
                     title="task",
                     title="ti",
                     summary="A task item.":
                 para
-                list
+                ID":kzH8E" # list
+                #list #ID":kzH8E"
                 listItemChecked ":bU6gD",
                         title="checked",
                         summary="Indicate that this task is complete."

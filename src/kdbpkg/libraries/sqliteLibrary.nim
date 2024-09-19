@@ -95,6 +95,10 @@ method lookup*(library: SqliteLibrary, id: ID): Option[Doc] =
 
 
 method add*(library: SqliteLibrary, docs: varargs[Doc]): Doc {.discardable.} =
+    ## Add several docs into the database.
+    ## Note: wraps these docs in a transaction, but
+    ## this never closes the transaction if it fails.
+    ## This is failsafe, but I need to actually get around to implementing the proper behavior, heh.
     library.db.exec(sql"begin")
     result = library.addWithoutVersion(docs)
     var needsVocabRegen = false

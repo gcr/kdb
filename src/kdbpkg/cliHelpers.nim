@@ -21,7 +21,7 @@ proc run*(lib: Library, e: Expr): Expr =
   if e.kind in CLI_REGISTRY:
     return CLI_REGISTRY[e.kind](e)
   else:
-    let resultCommand = lib.lookupDocForExpr(e)
+    let resultCommand = lib.lookupDefinitionOfExpr(e)
     if Some(@resultExpr) ?= resultCommand:
       if Some(@title) ?= resultExpr.firstTitle:
         raise newException(ValueError, fmt"Command {title} isn't implemented.")

@@ -58,8 +58,8 @@ type
         ## too, addressable thanks to some bootstrapping magic and
         ## hard-coded IDs!
         ##
-        ##    ":litom-mahut" -> (Title "vocabFor") (vocabFor "top")
-        ##    ":hakot-teret" -> (Title "Title") (vocabFor "top")
+        ##    ":VSzg5" -> (Title "vocabFor") (vocabFor "top")
+        ##    ":qyQgm" -> (Title "Title") (vocabFor "top")
         ##
 
         key*: ID
@@ -75,7 +75,9 @@ type
 
     Library* = ref object of RootObj
         ## Librarys are key/value stores of Docs.
+        ## This class is responsible for serialization/persistence, etc.
     MapLibrary* = ref object of Library
+        ## In-memory mapping, typically used for builtins.
         immutable = true
         docs: Table[ID, Doc]
 
@@ -137,7 +139,7 @@ method lookup*(library: Library, id: ID): Option[Doc] {.base.} = none(Doc)
 method lookup*(library: MapLibrary, id: ID): Option[Doc] =
     ## Lookup a doc by ID.
     if id in library.docs: return some(library.docs[id])
-proc lookupDocForExpr*(library: Library, expr: Expr): Option[Doc] =
+proc lookupDefinitionOfExpr*(library: Library, expr: Expr): Option[Doc] =
     ## Maps an `expr` to its own definition in the database.
     return library.lookup(expr.kind)
 method add*(library: Library, docs: varargs[Doc]): Doc {.discardable, base.} =
@@ -180,7 +182,7 @@ proc makeExpr(doc: Doc, val: Doc, items: openarray[Expr] = []): Expr =
     Expr(kind: doc.key, val: $val.key, children: items.toSeq)
 proc makeExpr(doc: Doc, items: openarray[Expr] = []): Expr =
     Expr(kind: doc.key, val: "", children: items.toSeq)
-proc macroBodyToExpr*(body: NimNode): seq[NimNode] {.compileTime.} =
+proc macroBodyToExpr(body: NimNode): seq[NimNode] {.compileTime.} =
     case (body.kind, body):
     of ({nnkStrLit, nnkCallStrLit}, _):
         # bare string literal: used as payload.
@@ -229,7 +231,8 @@ proc makeDoc(id: ID, items: varargs[Expr]): Doc =
     Doc(key: id, children: items.toSeq)
 macro newDoc*(id: ID, body: varargs[untyped]): untyped =
     ## This is the recommended entry point for creating
-    ## new docs. Several syntaxes are supported:
+    ## new docs, similarly to newExpr.
+    ## Several syntaxes are supported:
     ##
     ##   newDoc(ID":abcd", subExpr("payload"), subExpr2("payload"))
     ##   newDoc(ID":abcd", subExpr="payload", subExpr2="payload")
@@ -289,6 +292,9 @@ let
 # Said another way, only Docs define vocab, not Exprs.
 # The converter above allows the converse and not this,
 # which is correct behavior.
+# Here's how to think of this: in the below definitions, the
+# `Doc` type refers to vocab definitions that appear under
+# the Expr.
 iterator `/`*(a: Expr, b: Doc): Expr =
     for child in a:
         if child.kind == b.key:
@@ -322,4 +328,4 @@ method searchFor*(library: MapLibrary, kind: ID): seq[Doc] =
 
 
 proc wouldCauseVocabRegen*(d: Doc): bool =
-    return d.has(vocabFor) or d.has(vocabHas)
+    return d.has(vocabFor) or d.has(vocabHas) or d.has(vocabExplicitOnly)
